@@ -1,0 +1,28 @@
+Name:                tranform-everywhere
+Version:             0.0.1
+Synopsis:            Utilities for AST-transforming quasi-quoters.
+Description:
+License:             BSD3
+License-file:        LICENSE
+Author:              Michael Sloan
+Maintainer:          Michael Sloan <mgsloan at gmail>
+Homepage:            http://github.com/mgsloan/transform-everywhere
+Copyright:           Michael Sloan 2012
+Category:            Template Haskell
+Build-type:          Simple
+Stability:           experimental
+Cabal-version:       >=1.6
+Bug-Reports:         http://github.com/mgsloan/rex/transform-everywhere
+Source-Repository head
+  Type: git
+  Location: git://github.com/mgsloan/transform-everywhere
+
+Library
+  Hs-Source-Dirs:    src
+  Exposed-modules:   Language.Haskell.Meta.TransformEverywhere
+  Extensions:        RankNTypes
+  Build-depends:     base >= 3.0 && < 6,
+                     haskell-src-meta, 
+                     syb,
+                     template-haskell >= 2.5.0.0
+  Ghc-options:       -Wall

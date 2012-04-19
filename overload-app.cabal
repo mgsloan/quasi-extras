@@ -1,6 +1,6 @@
-Name:                tranform-everywhere
+Name:                overload-app
 Version:             0.0.1
-Synopsis:            Utilities for AST-transforming quasi-quoters.
+Synopsis:            Quasi-quoter for overloading function application
 Description:
 License:             BSD3
 License-file:        LICENSE

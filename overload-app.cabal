@@ -6,20 +6,20 @@ License:             BSD3
 License-file:        LICENSE
 Author:              Michael Sloan
 Maintainer:          Michael Sloan <mgsloan at gmail>
-Homepage:            http://github.com/mgsloan/transform-everywhere
+Homepage:            http://github.com/mgsloan/overload-app
 Copyright:           Michael Sloan 2012
 Category:            Template Haskell
 Build-type:          Simple
 Stability:           experimental
 Cabal-version:       >=1.6
-Bug-Reports:         http://github.com/mgsloan/rex/transform-everywhere
+Bug-Reports:         http://github.com/mgsloan/overload-app
 Source-Repository head
   Type: git
-  Location: git://github.com/mgsloan/transform-everywhere
+  Location: git://github.com/mgsloan/overload-app
 
 Library
   Hs-Source-Dirs:    src
-  Exposed-modules:   Language.Haskell.Meta.TransformEverywhere
+  Exposed-modules:   Language.Haskell.TH.OverloadApp
   Extensions:        RankNTypes
   Build-depends:     base >= 3.0 && < 6,
                      haskell-src-meta, 

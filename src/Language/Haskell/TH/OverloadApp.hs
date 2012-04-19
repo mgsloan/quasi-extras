@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Language.Haskell.Meta.TransformEverywhere
+-- Module      :  Language.Haskell.TH.OverloadApp
 -- Copyright   :  (c) 2012 Michael Sloan 
 -- License     :  BSD-style (see the LICENSE file)
 -- Maintainer  :  Michael Sloan <mgsloan@gmail.com>
@@ -13,7 +13,7 @@
 -- to overload function application.
 --
 -----------------------------------------------------------------------------
-module Language.Haskell.Meta.TransformEverywhere where
+module Language.Haskell.TH.OverloadApp where
 
 import Data.Data                 ( Data )
 import Data.Generics.Aliases     ( extM )

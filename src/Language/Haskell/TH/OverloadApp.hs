@@ -16,15 +16,35 @@
 module Language.Haskell.TH.OverloadApp where
 
 import Data.Data                 ( Data )
-import Data.Generics.Aliases     ( extM )
 import Data.Generics.Schemes     ( everywhereM )
+import Language.Haskell.Exts
+  ( ParseMode(..), ParseResult, Module(..), Decl, Extension(..), glasgowExts
+  , parseExpWithMode, parsePatWithMode, parseTypeWithMode, parseModuleWithMode )
 import Language.Haskell.TH
 import Language.Haskell.TH.Quote ( QuasiQuoter(..) )
-import Language.Haskell.Meta     ( parseExp, parsePat, parseType, parseDecs )
+import Language.Haskell.Meta     ( toExp, toPat, toType, toDecs
+                                 , parseResultToEither)
+
+-- import Language.Haskell.TH.Fixity
 
 -- | Throws the @Left@ as an error, otherwise yields the @Right@ value.
 fromError :: (Either String a) -> a
 fromError = either error id
+
+-- | Throws error on parse failure.
+fromParseResult :: ParseResult a -> a
+fromParseResult = fromError . parseResultToEither
+
+-- | Parse mode with all extensions and no fixities.
+parseMode :: ParseMode
+parseMode = ParseMode
+  { parseFilename = ""
+  , extensions = glasgowExts
+      ++ [TupleSections, BangPatterns]
+  , ignoreLinePragmas = False
+  , ignoreLanguagePragmas = False
+  , fixities = Nothing
+  }
 
 -- | Makes quasi-quotation into an AST transformer.
 transformer :: (Exp   ->  ExpQ)
@@ -33,10 +53,16 @@ transformer :: (Exp   ->  ExpQ)
             -> ([Dec] -> DecsQ)
             -> QuasiQuoter
 transformer qe qp qt qd = QuasiQuoter
-  (qe . fromError . parseExp)
-  (qp . fromError . parsePat)
-  (qt . fromError . parseType)
-  (qd . fromError . parseDecs)
+  (qe . toExp  . fromParseResult . parseExpWithMode  parseMode)
+  (qp . toPat  . fromParseResult . parsePatWithMode  parseMode)
+  (qt . toType . fromParseResult . parseTypeWithMode parseMode)
+  (qd . toDecs .                   parseDecsWithMode parseMode)
+
+parseDecsWithMode :: ParseMode -> String -> [Decl]
+parseDecsWithMode mode
+  = (\(Module _ _ _ _ _ _ x) -> x)
+  . fromParseResult
+  . parseModuleWithMode mode
 
 -- | Uses SYB to transform the AST everywhere.  Usually you want to have this
 --   apply to a particular type
@@ -46,6 +72,9 @@ transformEverywhere f = transformer ef ef ef ef
   ef :: Data a => a -> Q a
   ef = everywhereM f
 
+-- | Translates 
+
+{-
 -- | A quasiquoter that translates all instances of function application to
 --   invocations of an "app" function.
 -- 
@@ -55,25 +84,19 @@ overloadApp :: QuasiQuoter
 overloadApp = overloadAppWith 
               (\l r -> appsE [varE $ mkName "app", return l, return r] )
 
--- | Takes every single instance of function application (and translatesinfix
+-- | Takes every single instance of function application (and translates infix
 --   operators appropriately), and replaces it using the passed function to
 --   generate the new expression.
 --
 --   Things this doesn't handle:
---   * Unresolved infix operators - pretty much everything that's not a section.
 --   * All of the de-sugarings of do-notation, comprehensions, enumeration
 --     syntax, etc.
 overloadAppWith :: (Exp -> Exp -> ExpQ) -> QuasiQuoter
 overloadAppWith overload
-  = transformEverywhere $ return `extM` handlePat `extM` handleExp
+  = transformer ()
  where
-  handleExp (AppE l r)                   = overload l r
-  handleExp (InfixE (Just l) o Nothing)  = overload o l
-  handleExp (InfixE Nothing  o (Just r)) = do
-    f <- overload (VarE $ mkName "Prelude.flip") o
-    overload f r
-  handleExp (InfixE (Just l) o (Just r)) = overload o l >>= (`overload` r)
-  --        (InfixE Nothing  o Nothing) is not a case - that's just "o"
+  transform = everywhereM (return `extM` handlePat `extM` handleExp)
+  handleExp (AppE l r) = overload l r
   handleExp e = return e
 
   -- I count view patterns as function application.
@@ -81,3 +104,4 @@ overloadAppWith overload
    where lam = do n <- newName "x"
                   lamE [varP n] $ overload e (VarE n)
   handlePat e = return e
+-}

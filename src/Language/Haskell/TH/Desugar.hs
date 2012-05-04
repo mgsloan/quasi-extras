@@ -32,6 +32,7 @@ desugar = everywhereM (return `extM` helper)
  where
   helper (InfixE    l o r) =            dsInfix    l o r
   helper (DoE          xs) = eerror <$> dsDo          xs
+  helper (CompE        xs) = eerror <$> dsDo          xs
   helper (ListE        xs) =            dsList        xs
   helper (SigE        e t) =            dsSig        e t
   helper (LamE       ps e) =            dsLambda    ps e
@@ -81,7 +82,7 @@ dsDo (BindS p e:xs) = do
 dsList :: [Exp] -> ExpQ
 dsList = return . foldr (\l r -> AppE (AppE consE l) r) (ListE [])
  where
-  consE = VarE $ mkName ":"
+  consE = ConE $ mkName ":"
 
 
 dsSig :: Exp -> Type -> ExpQ
@@ -100,14 +101,18 @@ dsLambda ps e = do
                   [match (return $ TupP ps) (normalB $ return e) []]
 
 dsArithSeq :: Range -> ExpQ
-dsArithSeq (FromR       f    ) = appE (varE $ mkName "enumFrom"      ) (return f)
-dsArithSeq (FromThenR   f n  ) = appE (varE $ mkName "enumFromThen"  ) (return f)
-dsArithSeq (FromToR     f   t) = appE (varE $ mkName "enumFromTo"    ) (return f)
-dsArithSeq (FromThenToR f n t) = appE (varE $ mkName "enumFromThenTo") (return f)
+dsArithSeq (FromR       f    ) = appsE . (varE (mkName "enumFrom"      ) :) . map return
+                               $ [f]
+dsArithSeq (FromThenR   f n  ) = appsE . (varE (mkName "enumFromThen"  ) :) . map return
+                               $ [f, n]
+dsArithSeq (FromToR     f   t) = appsE . (varE (mkName "enumFromTo"    ) :) . map return
+                               $ [f, t]
+dsArithSeq (FromThenToR f n t) = appsE . (varE (mkName "enumFromThenTo") :) . map return
+                               $ [f, n, t]
 
 --TODO: What is "ExplicitPArr", PArrSeq, etc?
 
-{- TODO
+{-
 dsComp :: [Stmt] -> ExpQ
 dsComp xs = 
 

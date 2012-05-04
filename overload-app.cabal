@@ -26,7 +26,7 @@ Library
   Extensions:        RankNTypes
   Build-depends:     base >= 3.0 && < 6,
                      haskell-src-exts,
-                     haskell-src-meta, 
+                     haskell-src-meta == 0.5.1.1, 
                      syb,
                      template-haskell >= 2.5.0.0
   Ghc-options:       -Wall

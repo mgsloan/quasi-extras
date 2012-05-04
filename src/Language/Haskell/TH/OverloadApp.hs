@@ -39,8 +39,7 @@ fromParseResult = fromError . parseResultToEither
 parseMode :: ParseMode
 parseMode = ParseMode
   { parseFilename = ""
-  , extensions = glasgowExts
-      ++ [TupleSections, BangPatterns]
+  , extensions = glasgowExts ++ [TupleSections, BangPatterns]
   , ignoreLinePragmas = False
   , ignoreLanguagePragmas = False
   , fixities = Nothing
@@ -53,16 +52,16 @@ transformer :: (Exp   ->  ExpQ)
             -> ([Dec] -> DecsQ)
             -> QuasiQuoter
 transformer qe qp qt qd = QuasiQuoter
-  (qe . toExp  . fromParseResult . parseExpWithMode  parseMode)
-  (qp . toPat  . fromParseResult . parsePatWithMode  parseMode)
-  (qt . toType . fromParseResult . parseTypeWithMode parseMode)
-  (qd . toDecs .                   parseDecsWithMode parseMode)
+  (qe . parseExp)
+  (qp . parsePat)
+  (qt . parseType)
+  (qd . parseDecs)
 
-parseDecsWithMode :: ParseMode -> String -> [Decl]
-parseDecsWithMode mode
-  = (\(Module _ _ _ _ _ _ x) -> x)
-  . fromParseResult
-  . parseModuleWithMode mode
+parseExp  = toExp  . fromParseResult . parseExpWithMode  parseMode
+parsePat  = toPat  . fromParseResult . parsePatWithMode  parseMode
+parseType = toType . fromParseResult . parseTypeWithMode parseMode
+parseDecs = toDecs . (\(Module _ _ _ _ _ _ x) -> x)
+                   . fromParseResult . parseModuleWithMode parseMode
 
 -- | Uses SYB to transform the AST everywhere.  Usually you want to have this
 --   apply to a particular type

@@ -6,9 +6,9 @@ import Control.Monad         ( liftM )
 import Debug.Trace           ( trace )
 import Language.Haskell.TH
 import Language.Haskell.TH.Quote
-import Language.Haskell.Meta.Parse ( parseExp )
 
-import Language.Haskell.TH.Desugar ( eerror )
+import Language.Haskell.TH.Desugar ( eerror, desugar )
+import Language.Haskell.TH.OverloadApp ( parseExp ) 
 
 data Op = Op Exp Fixity
   deriving Eq
@@ -92,19 +92,19 @@ fromFixed (OpInfix l (Op e _) r)
   = InfixE (Just $ fromFixed l) e (Just $ fromFixed r)
 fromFixed (OpExp e) = e
 
+resolveFixities :: Exp -> ExpQ
+resolveFixities = liftM (fromFixed . eerror . resolveToks)
+                . toOpToks getFixity
 
 -- Expression quasiquoter
 equasi :: (String -> ExpQ) -> QuasiQuoter
 equasi f = QuasiQuoter f undefined undefined undefined
 
-resolveFixities :: Exp -> ExpQ
-resolveFixities = liftM (fromFixed . eerror . resolveToks)
-                . toOpToks getFixity
-
 -- Test quasiquoter
-toksQuasi :: QuasiQuoter
-toksQuasi = equasi $ resolveFixities . eerror . parseExp
+fixityQ :: QuasiQuoter
+fixityQ = equasi $ resolveFixities . parseExp
 
+desugarQ = equasi ((desugar =<<) . resolveFixities . parseExp)
 
 
 {- Version that handles negation (unnecessary)

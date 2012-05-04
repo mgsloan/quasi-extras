@@ -13,6 +13,8 @@ import Data.Generics         ( Data )
 import Data.Generics.Aliases ( extT, extM )
 import Data.Generics.Schemes ( everywhere, everywhereM )
 import Language.Haskell.TH
+import Language.Haskell.TH.Quote
+import Language.Haskell.TH.OverloadApp
 
 eerror :: Either String a -> a
 eerror (Left e) = error e
@@ -23,6 +25,7 @@ allUInfix = everywhere (id `extT` convert)
  where
   convert (InfixE (Just l) o (Just r)) = UInfixE l o r
   convert e = e
+
 
 desugar :: forall a. Data a => a -> Q a
 desugar = everywhereM (return `extM` helper)
@@ -91,6 +94,7 @@ dsSig e t = do
 dsLambda :: [Pat] -> Exp -> ExpQ
 dsLambda ps e = do
   names <- mapM (const $ newName "x") ps
+  -- Parens used to prevent the de-sugaring from recursing forever.
   parensE . lamE (map varP names) 
           $ caseE (tupE $ map varE names) 
                   [match (return $ TupP ps) (normalB $ return e) []]

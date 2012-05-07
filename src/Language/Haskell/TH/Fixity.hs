@@ -8,7 +8,7 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Quote
 
 import Language.Haskell.TH.Desugar ( eerror, desugar )
-import Language.Haskell.TH.OverloadApp ( parseExp ) 
+import Language.Haskell.TH.Builders ( parseExp )
 
 data Op = Op Exp Fixity
   deriving Eq
@@ -77,7 +77,7 @@ getFixity e = return $ notfound e
 
 toOpToks :: Monad m => (Exp -> m Fixity) -> Exp -> m [OpTok]
 toOpToks f e = case e of
-  ParensE e' -> helper e'
+  ParensE e' -> toOpToks f e'
   _          -> helper e
  where
   helper (UInfixE l o r) = do
@@ -104,6 +104,7 @@ equasi f = QuasiQuoter f undefined undefined undefined
 fixityQ :: QuasiQuoter
 fixityQ = equasi $ resolveFixities . parseExp
 
+desugarQ :: QuasiQuoter
 desugarQ = equasi ((desugar =<<) . resolveFixities . parseExp)
 
 

@@ -20,13 +20,23 @@ Source-Repository head
 Library
   Hs-Source-Dirs:    src
 
-  Exposed-modules:   Language.Haskell.TH.Fixity
+  Exposed-modules:   Language.Haskell.TH.Builders
+                     Language.Haskell.TH.Conversion
                      Language.Haskell.TH.Desugar
+                     Language.Haskell.TH.Fixity
                      Language.Haskell.TH.OverloadApp
+                     Language.Haskell.TH.ReifyCatch
+                     Language.Haskell.TH.ReifyCatch.Internal
   Extensions:        RankNTypes
   Build-depends:     base >= 3.0 && < 6,
+                     containers,
+                     either,
                      haskell-src-exts,
                      haskell-src-meta == 0.5.1.1, 
                      syb,
-                     template-haskell >= 2.5.0.0
+                     template-haskell >= 2.5.0.0,
+                     th-build,
+                     th-extra,
+                     th-lift,
+                     transformers
   Ghc-options:       -Wall

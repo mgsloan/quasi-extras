@@ -2,7 +2,7 @@
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Language.Haskell.TH.OverloadApp
--- Copyright   :  (c) 2012 Michael Sloan 
+-- Copyright   :  (c) 2012 Michael Sloan
 -- License     :  BSD-style (see the LICENSE file)
 -- Maintainer  :  Michael Sloan <mgsloan@gmail.com>
 -- Stability   :  experimental
@@ -17,33 +17,11 @@ module Language.Haskell.TH.OverloadApp where
 
 import Data.Data                 ( Data )
 import Data.Generics.Schemes     ( everywhereM )
-import Language.Haskell.Exts
-  ( ParseMode(..), ParseResult, Module(..), Decl, Extension(..), glasgowExts
-  , parseExpWithMode, parsePatWithMode, parseTypeWithMode, parseModuleWithMode )
 import Language.Haskell.TH
+import Language.Haskell.TH.Builders
 import Language.Haskell.TH.Quote ( QuasiQuoter(..) )
 import Language.Haskell.Meta     ( toExp, toPat, toType, toDecs
                                  , parseResultToEither)
-
--- import Language.Haskell.TH.Fixity
-
--- | Throws the @Left@ as an error, otherwise yields the @Right@ value.
-fromError :: (Either String a) -> a
-fromError = either error id
-
--- | Throws error on parse failure.
-fromParseResult :: ParseResult a -> a
-fromParseResult = fromError . parseResultToEither
-
--- | Parse mode with all extensions and no fixities.
-parseMode :: ParseMode
-parseMode = ParseMode
-  { parseFilename = ""
-  , extensions = glasgowExts ++ [TupleSections, BangPatterns]
-  , ignoreLinePragmas = False
-  , ignoreLanguagePragmas = False
-  , fixities = Nothing
-  }
 
 -- | Makes quasi-quotation into an AST transformer.
 transformer :: (Exp   ->  ExpQ)
@@ -56,12 +34,6 @@ transformer qe qp qt qd = QuasiQuoter
   (qp . parsePat)
   (qt . parseType)
   (qd . parseDecs)
-
-parseExp  = toExp  . fromParseResult . parseExpWithMode  parseMode
-parsePat  = toPat  . fromParseResult . parsePatWithMode  parseMode
-parseType = toType . fromParseResult . parseTypeWithMode parseMode
-parseDecs = toDecs . (\(Module _ _ _ _ _ _ x) -> x)
-                   . fromParseResult . parseModuleWithMode parseMode
 
 -- | Uses SYB to transform the AST everywhere.  Usually you want to have this
 --   apply to a particular type

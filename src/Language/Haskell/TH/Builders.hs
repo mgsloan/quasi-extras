@@ -1,14 +1,23 @@
-{-# LANGUAGE TemplateHaskell, QuasiQuotes #-}
+{-# LANGUAGE TemplateHaskell, QuasiQuotes, ViewPatterns #-}
 module Language.Haskell.TH.Builders where
 
 import qualified Data.Map as M
 
 import Control.Applicative              ( (<$>) )
-import Control.Arrow                    ( (&&&) )
+import Control.Arrow                    ( (&&&), second )
+import Data.Char                        ( toUpper )
+import Data.Data                        ( Data )
 import Data.Either                      ( rights )
+import Data.List                        ( isPrefixOf, isInfixOf )
+import Data.Generics.Aliases            ( extM )
+import Data.Generics.Schemes            ( everywhereM )
+import Debug.Trace (trace)
 import Language.Haskell.Exts
-  ( ParseMode(..), ParseResult, Module(..), Decl, Extension(..), glasgowExts
+  ( ParseMode(..), ParseResult(..), Module(..), Decl, Extension(..), SrcLoc(..)
+  , glasgowExts
   , parseExpWithMode, parsePatWithMode, parseTypeWithMode, parseModuleWithMode )
+
+import qualified Language.Haskell.Exts as Exts
 import Language.Haskell.Meta ( toExp, toPat, toType, toDecs, parseResultToEither )
 import Language.Haskell.TH
 import Language.Haskell.TH.Conversion   ( expToPat, expToPat' )
@@ -18,18 +27,20 @@ import Language.Haskell.TH.Quote        ( QuasiQuoter(..) )
 import Language.Haskell.TH.Substitution ( Free(..), Subst(..), Sub(..) )
 import Language.Haskell.TH.Syntax       ( occString, pkgString, modString )
 
---TODO: th-extra is nice!
---TODO: use th-build?
+debug x = trace (show x) x
 
 --TODO: there are probably bugs here.
 
 qualifyNames :: (Free a, Subst a) => a -> Q a
 qualifyNames x = do
   let vars = rights $ free x
-  infos <- mapM reify vars
+  infos <- mapM reify $ filter (\n -> not $ "splice" `isPrefixOf` nameBase n) vars
 --  runIO $ print infos
   let rewrites = M.fromList . zip vars $ map name_of infos
   return $ subst (Sub rewrites M.empty M.empty) x
+
+-- TODO: handle \ escaping
+-- TODO: handle nesting
 
 parse = rec 0 Nothing ""
  where
@@ -45,33 +56,78 @@ parse = rec 0 Nothing ""
         (      c:xs,       _)           ->       rec n                    s ( [c] ++ a) xs
 
 
-{-
 thExp = QuasiQuoter expr undefined undefined undefined
  where
-  expr = resolve . build names . parse
-    let e = parseExpWithMode parseMode
-
-    lift =<< qualifyNames e
+  expr s = substitute 
+         . second (\e -> lift =<< qualifyNames e)
+         . resolve . build names $ parse s
    where
-    names = filter (`notElem` s) $ map (("splice" ++) . show) [1..]
+    substitute :: ([((String, Int), String)], ExpQ) -> ExpQ
+    substitute (xs, expr) 
+      = everywhereM (return `extM` doExp `extM` doTyp `extM` doPat) =<< expr
+     where
+      m = M.fromList xs
+      doExp :: Exp -> ExpQ
+      doExp e@(AppE (ConE (pprint -> "Language.Haskell.TH.Syntax.VarE"))
+                    (AppE (AppE (ConE (pprint -> "Language.Haskell.TH.Syntax.Name"))
+                                (AppE (VarE (pprint -> "Language.Haskell.TH.Syntax.mkOccName"))
+                                      (LitE (StringL n))))
+                          (ConE (pprint -> "Language.Haskell.TH.Syntax.NameS"))))
+        | Just x <- M.lookup (n, 0) m = return $ parseExp x
+        | otherwise = return e
 
-    build    ns  (Left  s:xs) = Left     s  : build ns xs
-    build (n:ns) (Right x:xs) = Right (x,n) : build ns xs
+      {-
+      doExp v@(LitE (StringL n))
+        | Just x <- M.lookup (n, 0) m = return $ parseExp x
+        | otherwise = return v -}
+      doExp e = return e
+      doTyp :: Type -> TypeQ
+      doTyp t = return t
+      doPat :: Pat  -> PatQ
+      doPat p = return p
 
-    resolve = case attempt $ SrcLoc "" 1 1 of
-      (locs, str) -> case parseExpWithMode parseMode of
+    names :: [String]
+    names = filter (not . flip isInfixOf s) $ map (("splice" ++) . show) [1..]
 
-      (locs, )
-    
-    attempt l = (map fst &&& reverse . snd . last)
-              . scanl (\(l, a) s -> (uloc l s, reverse s ++ a)) (SrcLoc "" 1 1, "") 
-              . map (either id snd)
+    build     _            [] = []
+    build    ns  (Left  s:xs) = Left         s  : build ns xs
+    build (n:ns) (Right x:xs) = Right ((n,0),x) : build ns xs
 
-    uloc (SrcLoc  f l c) t = SrcLoc f l' c'
+    resolve :: [Either String ((String, Int), String)] -> ([((String, Int), String)], Exp)
+    resolve xs = case attempt (SrcLoc "" 1 1, [], "") xs of
+      (locs, str) -> case parseExpWithMode parseMode str of
+        (ParseOk x) -> (rights xs, toExp x)
+        (ParseFailed l e) -> case break insideSplice $ zip xs (tail locs) of
+          (good, (Right ((n, i), x), _) : rest)
+            | i < 2     -> resolve $ map fst good ++ (Right ((n, i + 1), x) : map fst rest)
+            | otherwise -> error $ "Could not find placeholder for splice '" ++ x ++ "'\n"
+                                ++ "due to parse error: " ++ perror e
+          _ -> error $ "Parse Error: " ++ perror e
+         where
+          insideSplice (Right _, loc) = loc >= l
+          insideSplice _ = False
+          perror e = e ++ "\nIn AST with splice placeholders:" ++ str
+
+    attempt :: (SrcLoc, [SrcLoc], String) -> [Either String ((String, Int), String)]
+            ->         ([SrcLoc], String)
+    attempt (l, ls, a)     [] = (reverse ls, reverse a)
+    attempt (l, ls, a) (x:xs) = rec $ either id (spliceDummy . fst) x
+     where
+      rec str = attempt (uloc l rev, l:ls, rev ++ a) xs
+       where rev = reverse str
+
+    spliceDummy (n, 0) = n
+    spliceDummy (n, 1) = "_ -> " ++ n
+    spliceDummy (n, 2) = "(" ++ capitalize n ++ " a)"
+
+    capitalize (x:xs) = toUpper x : xs
+
+    -- NOTE: only works for a reversed string.
+    uloc (SrcLoc  f l c) t = SrcLoc f l'
+                           $ if l /= l' then c' else c + c'
      where
       l' = l + length (filter (=='\n') t)
-      c' = length . takeWhile (/='\n') $ reverse t
--}
+      c' = length $ takeWhile (/='\n') t
 
 
 thExpr = QuasiQuoter expr pat undefined undefined
@@ -134,36 +190,3 @@ parseMode = ParseMode
   , ignoreLanguagePragmas = False
   , fixities = Nothing
   }
-
-{-
-qualifyNames :: Data a => a -> Q a
-qualifyNames = 
- where
-  helper scope x = doDec `extM` doType `extM` doPat `extM` doExp
-   where
-    rewrite n
-      | n `elem` scope = n
-      | otherwise = reify n
-    doExp (VarE n)
-    doExp (ConE n)
-    doExp (RecConE n fs) = if n `elem` scope then
--}
-
--- TODO: handle \ escaping
--- TODO: handle nesting
-
-
-
-{-
-parse = rec [("", "")]
- where 
-  rec           [] [("", a)]     = 
-  rec (    '"':xs)           st  = parse xs (("\"",    "") : st)
-  rec ('$':'(':xs)           st  = parse xs (("$(",    "") : st)
-  rec (    '(':xs) (('"', a):st) = parse xs (( '"', '(':a) : st)
-  rec (    '(':xs)           st  = parse xs (( '(',    "") : st)
-  rec (    ')':xs) (("$(",a):st) = reverse a
-  rec (    ')':xs) (("(", a):st) = reverse a
-  rec (    ')':xs) ((  d, a):st) = Left $ "Expected match for " ++ d ++ " instead of ')'."
-  rec (      c:xs) ((d,   a):st) = parse xs ((   d,   c:a) : st)
--}

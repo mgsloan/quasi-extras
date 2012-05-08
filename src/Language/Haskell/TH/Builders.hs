@@ -56,87 +56,15 @@ parse = rec 0 Nothing ""
         (      c:xs,       _)           ->       rec n                    s ( [c] ++ a) xs
 
 
-thExp = QuasiQuoter expr undefined undefined undefined
+thExp = QuasiQuoter expr pat undefined undefined
  where
   expr s = substitute 
          . second (\e -> lift =<< qualifyNames e)
-         . resolve . build names $ parse s
-   where
-    substitute :: ([((String, Int), String)], ExpQ) -> ExpQ
-    substitute (xs, expr) 
-      = everywhereM (return `extM` doExp `extM` doTyp `extM` doPat) =<< expr
-     where
-      m = M.fromList xs
-      doExp :: Exp -> ExpQ
-      doExp e@(AppE (ConE (pprint -> "Language.Haskell.TH.Syntax.VarE"))
-                    (AppE (AppE (ConE (pprint -> "Language.Haskell.TH.Syntax.Name"))
-                                (AppE (VarE (pprint -> "Language.Haskell.TH.Syntax.mkOccName"))
-                                      (LitE (StringL n))))
-                          (ConE (pprint -> "Language.Haskell.TH.Syntax.NameS"))))
-        | Just x <- M.lookup (n, 0) m = return $ parseExp x
-        | otherwise = return e
+         . resolve . build (unusedNames s) $ parse s
 
-      {-
-      doExp v@(LitE (StringL n))
-        | Just x <- M.lookup (n, 0) m = return $ parseExp x
-        | otherwise = return v -}
-      doExp e = return e
-      doTyp :: Type -> TypeQ
-      doTyp t = return t
-      doPat :: Pat  -> PatQ
-      doPat p = return p
-
-    names :: [String]
-    names = filter (not . flip isInfixOf s) $ map (("splice" ++) . show) [1..]
-
-    build     _            [] = []
-    build    ns  (Left  s:xs) = Left         s  : build ns xs
-    build (n:ns) (Right x:xs) = Right ((n,0),x) : build ns xs
-
-    resolve :: [Either String ((String, Int), String)] -> ([((String, Int), String)], Exp)
-    resolve xs = case attempt (SrcLoc "" 1 1, [], "") xs of
-      (locs, str) -> case parseExpWithMode parseMode str of
-        (ParseOk x) -> (rights xs, toExp x)
-        (ParseFailed l e) -> case break insideSplice $ zip xs (tail locs) of
-          (good, (Right ((n, i), x), _) : rest)
-            | i < 2     -> resolve $ map fst good ++ (Right ((n, i + 1), x) : map fst rest)
-            | otherwise -> error $ "Could not find placeholder for splice '" ++ x ++ "'\n"
-                                ++ "due to parse error: " ++ perror e
-          _ -> error $ "Parse Error: " ++ perror e
-         where
-          insideSplice (Right _, loc) = loc >= l
-          insideSplice _ = False
-          perror e = e ++ "\nIn AST with splice placeholders:" ++ str
-
-    attempt :: (SrcLoc, [SrcLoc], String) -> [Either String ((String, Int), String)]
-            ->         ([SrcLoc], String)
-    attempt (l, ls, a)     [] = (reverse ls, reverse a)
-    attempt (l, ls, a) (x:xs) = rec $ either id (spliceDummy . fst) x
-     where
-      rec str = attempt (uloc l rev, l:ls, rev ++ a) xs
-       where rev = reverse str
-
-    spliceDummy (n, 0) = n
-    spliceDummy (n, 1) = "_ -> " ++ n
-    spliceDummy (n, 2) = "(" ++ capitalize n ++ " a)"
-
-    capitalize (x:xs) = toUpper x : xs
-
-    -- NOTE: only works for a reversed string.
-    uloc (SrcLoc  f l c) t = SrcLoc f l'
-                           $ if l /= l' then c' else c + c'
-     where
-      l' = l + length (filter (=='\n') t)
-      c' = length $ takeWhile (/='\n') t
-
-
-thExpr = QuasiQuoter expr pat undefined undefined
- where
-  expr s = lift =<< qualifyNames (parseExp s)
-  pat  s = do
-    e <- expr s
-    -- runIO $ print e
-    expToPat func e
+  pat s = substitute
+        . second (\e -> expToPat func =<< lift =<< qualifyNames e)
+        . resolve . build (unusedNames s) $ parse s
 
   func x@[VarE fn, p@(LitE (StringL n))]
     | pprint fn == "Language.Haskell.TH.Syntax.mkOccName"
@@ -151,7 +79,76 @@ thExpr = QuasiQuoter expr pat undefined undefined
     | otherwise = error $ "Could not convert function: " ++ pprint fn
   func x = error $ "Could not convert: " ++ show x
 
-  -- undefined -- qualifyNames . parseExp
+  unusedNames s = filter (not . flip isInfixOf s) $ map (("splice" ++) . show) [1..]
+
+  substitute :: Data a => ([((String, Int), String)], Q a) -> Q a
+  substitute (xs, expr) 
+    = everywhereM (return `extM` doExp `extM` doTyp `extM` doPat) =<< expr
+   where
+    m = M.fromList xs
+    doExp :: Exp -> ExpQ
+    doExp e@(AppE (ConE (pprint -> "Language.Haskell.TH.Syntax.VarE"))
+                  (AppE (AppE (ConE (pprint -> "Language.Haskell.TH.Syntax.Name"))
+                              (AppE (VarE (pprint -> "Language.Haskell.TH.Syntax.mkOccName"))
+                                    (LitE (StringL n))))
+                        (ConE (pprint -> "Language.Haskell.TH.Syntax.NameS"))))
+      | Just x <- M.lookup (n, 0) m = return $ parseExp x
+    {-
+    doExp v@(LitE (StringL n))
+      | Just x <- M.lookup (n, 0) m = return $ parseExp x
+      | otherwise = return v -}
+    doExp e = return e
+    doTyp :: Type -> TypeQ
+    doTyp t = return t
+    doPat :: Pat  -> PatQ
+    doPat p@(ConP (pprint -> "Language.Haskell.TH.Syntax.VarE")
+                  [ ConP (pprint -> "Language.Haskell.TH.Syntax.Name")
+                         [ ViewP (VarE (pprint -> "Language.Haskell.TH.Syntax.occString"))
+                                       (LitP (StringL n))
+                         , ConP (pprint -> "Language.Haskell.TH.Syntax.NameS") [] ] ] )
+      | Just x <- M.lookup (n, 0) m = return $ parsePat x
+    doPat p = return p
+
+  build     _            [] = []
+  build    ns  (Left  s:xs) = Left         s  : build ns xs
+  build (n:ns) (Right x:xs) = Right ((n,0),x) : build ns xs
+
+  resolve :: [Either String ((String, Int), String)] -> ([((String, Int), String)], Exp)
+  resolve xs = case attempt (SrcLoc "" 1 1, [], "") xs of
+    (locs, str) -> case parseExpWithMode parseMode str of
+      (ParseOk x) -> (rights xs, toExp x)
+      (ParseFailed l e) -> case break insideSplice $ zip xs (tail locs) of
+        (good, (Right ((n, i), x), _) : rest)
+          | i < 2     -> resolve $ map fst good ++ (Right ((n, i + 1), x) : map fst rest)
+          | otherwise -> error $ "Could not find placeholder for splice '" ++ x ++ "'\n"
+                              ++ "due to parse error: " ++ perror e
+        _ -> error $ "Parse Error: " ++ perror e
+       where
+        insideSplice (Right _, loc) = loc >= l
+        insideSplice _ = False
+        perror e = e ++ "\nIn AST with splice placeholders:" ++ str
+
+  attempt :: (SrcLoc, [SrcLoc], String) -> [Either String ((String, Int), String)]
+          ->         ([SrcLoc], String)
+  attempt (l, ls, a)     [] = (reverse ls, reverse a)
+  attempt (l, ls, a) (x:xs) = rec $ either id (spliceDummy . fst) x
+   where
+    rec str = attempt (uloc l rev, l:ls, rev ++ a) xs
+     where rev = reverse str
+
+  spliceDummy (n, 0) = n
+  spliceDummy (n, 1) = "_ -> " ++ n
+  spliceDummy (n, 2) = "(" ++ capitalize n ++ " a)"
+
+  capitalize (x:xs) = toUpper x : xs
+
+  -- NOTE: only works for a reversed string.
+  uloc (SrcLoc  f l c) t = SrcLoc f l'
+                         $ if l /= l' then c' else c + c'
+   where
+    l' = l + length (filter (=='\n') t)
+    c' = length $ takeWhile (/='\n') t
+
 
 {-
 thPat  = QuasiQuoter expr pat undefined undefined

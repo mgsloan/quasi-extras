@@ -1,6 +1,6 @@
-Name:                overload-app
+Name:                quasi-extras
 Version:             0.0.1
-Synopsis:            Quasi-quoter for overloading function application
+Synopsis:            Utilities for building advanced Quasi-quoters.
 Description:
 License:             BSD3
 License-file:        LICENSE

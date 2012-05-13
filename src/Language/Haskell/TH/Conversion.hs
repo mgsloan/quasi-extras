@@ -1,12 +1,13 @@
 {-# LANGUAGE TupleSections #-}
 module Language.Haskell.TH.Conversion
-  ( patToExp, expToPat, expToPat', conToPat ) where
+  ( patToExp, expToPat, expToPat', expToPatMap, conToPat ) where
 
 import Control.Applicative         ( liftA )
+import qualified Data.Map  as M
 import Language.Haskell.TH
-import Language.Haskell.TH.Lib     ( unboxedTupE, unboxedTupP )
 -- TODO: remove
 import Language.Haskell.TH.Build
+import Language.Haskell.TH.Lib     ( unboxedTupE, unboxedTupP )
 
 -- | Converts a pattern to an expression.
 patToExp :: Pat -> Q Exp
@@ -35,6 +36,14 @@ patToExp (ViewP _ _) = error "ViewP has no expression equivalent."
 patToExp (WildP    ) = error "WildP has no expression equivalent."
 
 expToPat' = expToPat (const $ error "Cannot convert function application to pattern.")
+
+expToPatMap :: (M.Map String ([Exp] -> PatQ)) -> Exp -> PatQ
+expToPatMap m = expToPat fallback
+ where
+  fallback (VarE fn:xs)
+    | Just func <- M.lookup (pprint fn) m = func xs
+    | otherwise = error $ "Could not convert function to pattern: " ++ pprint fn
+  fallback e = error $ "Could not convert: " ++ pprint e
 
 -- | Converts an expression to a pattern.
 expToPat :: ([Exp] -> PatQ) -> Exp -> PatQ

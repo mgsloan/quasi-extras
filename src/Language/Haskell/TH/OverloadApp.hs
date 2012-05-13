@@ -24,6 +24,7 @@ import Language.Haskell.Meta     ( toExp, toPat, toType, toDecs
                                  , parseResultToEither)
 
 -- | Makes quasi-quotation into an AST transformer.
+{-
 transformer :: (Exp   ->  ExpQ)
             -> (Pat   ->  PatQ)
             -> (Type  -> TypeQ)
@@ -42,6 +43,7 @@ transformEverywhere f = transformer ef ef ef ef
  where
   ef :: Data a => a -> Q a
   ef = everywhereM f
+-}
 
 -- | Translates 
 

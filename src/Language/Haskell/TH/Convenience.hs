@@ -1,77 +1,131 @@
 {-# LANGUAGE TypeFamilies, FlexibleInstances, TypeSynonymInstances #-}
-module Language.Haskell.TH.Convenience where
+module Language.Haskell.TH.Convenience
+  (   toExp,   toPat,   toType,   toDec,   toBody,   toStmt,   toMatch,   toGuard,   toTyVarBndr
+  , fromExp, fromPat, fromType, fromDec, fromBody, fromStmt, fromMatch, fromGuard, fromTyVarBndr
+  )
+  where
 
-import Control.Applicative ((<$>), (<*>))
-import Data.Char (isUpper)
+import Control.Applicative       ((<$>), (<*>))
+import Data.Char                 (isUpper)
+import Language.Haskell.TH.Named ( name_of )
 
 import Language.Haskell.TH
 
-class ToExpQ      a where toExpQ      :: a -> ExpQ
-class ToPatQ      a where toPatQ      :: a -> PatQ
-class ToTypeQ     a where toTypeQ     :: a -> TypeQ
-class ToDecQ      a where toDecQ      :: a -> DecQ
-class ToBodyQ     a where toBodyQ     :: a -> BodyQ
-class ToStmtQ     a where toStmtQ     :: a -> StmtQ
-class ToMatchQ    a where toMatchQ    :: a -> MatchQ
-class ToGuardQ    a where toGuardQ    :: a -> GuardQ
+class ToExp      a where toExp      :: a -> Exp
+class ToPat      a where toPat      :: a -> Pat
+class ToType     a where toType     :: a -> Type
+class ToDec      a where toDec      :: a -> Dec
+class ToBody     a where toBody     :: a -> Body
+class ToStmt     a where toStmt     :: a -> Stmt
+class ToMatch    a where toMatch    :: a -> Match
+class ToGuard    a where toGuard    :: a -> Guard
 class ToTyVarBndr a where toTyVarBndr :: a -> TyVarBndr
 
-instance ToExpQ   ExpQ   where toExpQ   = id
-instance ToPatQ   PatQ   where toPatQ   = id
-instance ToTypeQ  TypeQ  where toTypeQ  = id
-instance ToDecQ   DecQ   where toDecQ   = id
-instance ToBodyQ  BodyQ  where toBodyQ  = id
-instance ToStmtQ  StmtQ  where toStmtQ  = id
-instance ToMatchQ MatchQ where toMatchQ = id
-instance ToGuardQ GuardQ where toGuardQ = id
-
-instance ToExpQ   Exp   where toExpQ   = return
-instance ToPatQ   Pat   where toPatQ   = return
-instance ToTypeQ  Type  where toTypeQ  = return
-instance ToDecQ   Dec   where toDecQ   = return
-instance ToBodyQ  Body  where toBodyQ  = return
-instance ToStmtQ  Stmt  where toStmtQ  = return
-instance ToMatchQ Match where toMatchQ = return
-instance ToGuardQ Guard where toGuardQ = return
+instance ToExp   Exp   where toExp   = id
+instance ToPat   Pat   where toPat   = id
+instance ToType  Type  where toType  = id
+instance ToDec   Dec   where toDec   = id
+instance ToBody  Body  where toBody  = id
+instance ToStmt  Stmt  where toStmt  = id
+instance ToMatch Match where toMatch = id
+instance ToGuard Guard where toGuard = id
 
 ifCap :: (Name -> a) -> (Name -> a) -> Name -> a
 ifCap f g n = if isUpper . head $ nameBase n then f n else g n
 
-instance ToExpQ      Name where toExpQ      = ifCap conE varE
-instance ToPatQ      Name where toPatQ      = ifCap (`conP` []) varP
-instance ToTypeQ     Name where toTypeQ     = ifCap conT varT
-instance ToBodyQ     Name where toBodyQ     = toBodyQ . toExpQ
-instance ToStmtQ     Name where toStmtQ     = toStmtQ . toExpQ
+instance ToExp       Name where toExp       = ifCap ConE VarE
+instance ToPat       Name where toPat       = ifCap (`ConP` []) VarP
+instance ToType      Name where toType      = ifCap ConT VarT
+instance ToBody      Name where toBody      = toBody . toExp
+instance ToStmt      Name where toStmt      = toStmt . toExp
 instance ToTyVarBndr Name where toTyVarBndr = PlainTV
 
-instance ToExpQ      String where toExpQ      = toExpQ      . mkName
-instance ToPatQ      String where toPatQ      = toPatQ      . mkName
-instance ToTypeQ     String where toTypeQ     = toTypeQ     . mkName
-instance ToBodyQ     String where toBodyQ     = toBodyQ     . mkName 
-instance ToStmtQ     String where toStmtQ     = toStmtQ     . mkName 
+instance ToExp       String where toExp       = toExp      . mkName
+instance ToPat       String where toPat       = toPat      . mkName
+instance ToType      String where toType      = toType     . mkName
+instance ToBody      String where toBody      = toBody     . mkName 
+instance ToStmt      String where toStmt      = toStmt     . mkName 
 instance ToTyVarBndr String where toTyVarBndr = toTyVarBndr . mkName
 
-instance ToBodyQ Exp              where toBodyQ = normalB . return
-instance ToBodyQ ExpQ             where toBodyQ = normalB
+instance ToBody Exp            where toBody = NormalB
 --TODO: good idea?
-instance ToBodyQ [  (Guard, Exp)] where toBodyQ = guardedB . map return
-instance ToBodyQ [Q (Guard, Exp)] where toBodyQ = guardedB
-instance ToBodyQ [(GuardQ, ExpQ)] where toBodyQ = toBodyQ . map (\(g, e) -> (,) <$> g <*> e)
+instance ToBody [(Guard, Exp)] where toBody = GuardedB
 
-instance ToGuardQ  Exp    where toGuardQ = normalG . return
-instance ToGuardQ  ExpQ   where toGuardQ = normalG
-instance ToGuardQ  Stmt   where toGuardQ = patG . (:[]) . return
-instance ToGuardQ  StmtQ  where toGuardQ = patG . (:[])
-instance ToGuardQ [Stmt ] where toGuardQ = patG . map return
-instance ToGuardQ [StmtQ] where toGuardQ = patG
+instance ToGuard  Exp   where toGuard = NormalG
+instance ToGuard  Stmt  where toGuard = PatG . (:[])
+instance ToGuard [Stmt] where toGuard = PatG
 
-instance ToStmtQ Exp  where toStmtQ = noBindS . return
-instance ToStmtQ ExpQ where toStmtQ = noBindS
+instance ToStmt Exp where toStmt = NoBindS
 
 --TODO: good ideas?
 instance ToTyVarBndr (Name, Kind) where toTyVarBndr = uncurry KindedTV
 -- instance ToPred (Name, [Type])
 -- instance ToPred (Type, Type)
 
-instance (ToPatQ p, ToBodyQ b, ToDecQ d) => ToMatchQ (p, b, [d]) where toMatchQ (p, b, ds) = match (toPatQ p) (toBodyQ b) (map toDecQ ds)
-instance (ToPatQ p, ToBodyQ b)           => ToMatchQ (p, b     ) where toMatchQ (p, b    ) = match (toPatQ p) (toBodyQ b)              []
+instance (ToPat p, ToBody b, ToDec d) => ToMatch (p, b, [d]) where toMatch (p, b, ds) = Match (toPat p) (toBody b) (map toDec ds)
+instance (ToPat p, ToBody b)          => ToMatch (p, b     ) where toMatch (p, b    ) = Match (toPat p) (toBody b)              []
+
+
+class FromExp       a where fromExp       :: Exp       -> a
+class FromPat       a where fromPat       :: Pat       -> a
+class FromType      a where fromType      :: Type      -> a
+class FromDec       a where fromDec       :: Dec       -> a
+class FromBody      a where fromBody      :: Body      -> a
+class FromStmt      a where fromStmt      :: Stmt      -> a
+class FromMatch     a where fromMatch     :: Match     -> a
+class FromGuard     a where fromGuard     :: Guard     -> a
+class FromTyVarBndr a where fromTyVarBndr :: TyVarBndr -> a
+
+instance FromExp   Exp   where fromExp   = id
+instance FromPat   Pat   where fromPat   = id
+instance FromType  Type  where fromType  = id
+instance FromDec   Dec   where fromDec   = id
+instance FromBody  Body  where fromBody  = id
+instance FromStmt  Stmt  where fromStmt  = id
+instance FromMatch Match where fromMatch = id
+instance FromGuard Guard where fromGuard = id
+
+-- TODO
+
+{-
+instance FromExp       Name where fromExp       = name_of
+instance FromPat       Name where fromPat       = name_of
+instance FromType      Name where fromType      = name_of
+instance FromBody      Name where fromBody      = name_of
+instance FromStmt      Name where fromStmt      = name_of
+instance FromTyVarBndr Name where fromTyVarBndr = name_of
+-}
+
+{-
+instance FromExp       String where fromExp       = toExp      . mkName
+instance FromPat       String where fromPat       = toPat      . mkName
+instance FromType      String where fromType      = toType     . mkName
+instance FromBody      String where fromBody      = toBody     . mkName 
+instance FromStmt      String where fromStmt      = toStmt     . mkName 
+instance FromTyVarBndr String where fromTyVarBndr = toTyVarBndr . mkName
+
+instance FromBody Exp              where fromBody = normalB . return
+instance FromBody Exp             where fromBody = normalB
+--TODO: good idea?
+instance FromBody [  (Guard, Exp)] where fromBody = guardedB . map return
+instance FromBody [ (Guard, Exp)] where fromBody = guardedB
+instance FromBody [(Guard, Expeval)] where fromBody = toBody . map (\(g, e) -> (,) <$> g <*> e)
+
+instance FromGuard  Exp    where fromGuard = normalG . return
+instance FromGuard  Exp   where fromGuard = normalG
+instance FromGuard  Stmt   where fromGuard = patG . (:[]) . return
+instance FromGuard  Stmt  where fromGuard = patG . (:[])
+instance FromGuard [Stmt ] where fromGuard = patG . map return
+instance FromGuard [Stmt] where fromGuard = patG
+
+instance FromStmt Exp  where fromStmt = noBindS . return
+instance FromStmt Exp where fromStmt = noBindS
+-}
+
+--TODO: good ideas?
+--instance FromTyVarBndr (Name, Kind) where fromTyVarBndr = uncurry KindedTV
+-- instance ToPred (Name, [Type])
+-- instance ToPred (Type, Type)
+
+--instance (FromPat p, FromBody b, FromDec d) => FromMatch (p, b, [d]) where toMatch (p, b, ds) = match (toPat p) (toBody b) (map toDec ds)
+--instance (FromPat p, FromBody b)             => FromMatch (p, b     ) where toMatch (p, b    ) = match (toPat p) (toBody b)              []

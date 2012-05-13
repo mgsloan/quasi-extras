@@ -33,6 +33,8 @@ Library
                      either,
                      haskell-src-exts,
                      haskell-src-meta == 0.5.1.1, 
+                     parsec,
+                     split,
                      syb,
                      template-haskell >= 2.5.0.0,
                      th-build,

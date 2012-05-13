@@ -7,7 +7,7 @@ import Debug.Trace           ( trace )
 import Language.Haskell.TH
 import Language.Haskell.TH.Quote
 
-import Language.Haskell.TH.Desugar ( eerror, desugar )
+import Language.Haskell.TH.Desugar ( eerror )
 import Language.Haskell.TH.Builders ( parseExp )
 
 data Op = Op Exp Fixity

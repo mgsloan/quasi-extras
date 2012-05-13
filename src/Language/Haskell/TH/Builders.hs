@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, QuasiQuotes, ViewPatterns, ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell, QuasiQuotes, ViewPatterns, ScopedTypeVariables, TupleSections #-}
 
 module Language.Haskell.TH.Builders where
 
@@ -14,11 +14,6 @@ import Data.Maybe                       ( catMaybes )
 import Data.Generics.Aliases            ( extM, extQ )
 import Data.Generics.Schemes            ( everywhereM )
 import Debug.Trace (trace)
-import Language.Haskell.Exts
-  ( ParseMode(..), ParseResult(..), Module(..), Decl, Extension(..), SrcLoc(..)
-  , glasgowExts
-  , parseExpWithMode, parsePatWithMode, parseTypeWithMode, parseModuleWithMode )
-
 import qualified Language.Haskell.Exts as Exts
 import qualified Language.Haskell.Meta as Exts 
   ( toExp, toPat, toType, toDecs, parseResultToEither )
@@ -35,43 +30,48 @@ import Text.Parsec
 
 
 thExp, thPat, thType, thDecs :: QuasiQuoter
-thExp  = astQuoter "Exp"  parseExp  id id
-thPat  = astQuoter "Pat"  parsePat  id id
-thType = astQuoter "Type" parseType id id
-thDecs = astQuoter "Decs" parseDecs id id
+thExp  = astQuoter False "Exp"  parseExp
+thPat  = astQuoter False "Pat"  parsePat
+thType = astQuoter False "Type" parseType
+thDecs = astQuoter False "Decs" parseDecs
 
 thExp', thPat', thType', thDecs' :: QuasiQuoter
-thExp'  = astQuoter "Exp"  parseExp  (AppE $ converter "toExp" ) (ViewP $ converter "fromExp" )
-thPat'  = astQuoter "Pat"  parsePat  (AppE $ converter "toPat" ) (ViewP $ converter "fromPat" )
-thType' = astQuoter "Type" parseType (AppE $ converter "toType") (ViewP $ converter "fromType")
-thDecs' = astQuoter "Decs" parseDecs (AppE $ converter "toDec" ) (ViewP $ converter "fromDec" )
+thExp'  = astQuoter True "Exp"  parseExp
+thPat'  = astQuoter True "Pat"  parsePat
+thType' = astQuoter True "Type" parseType
+thDecs' = astQuoter True "Decs" parseDecs
 
-converter = VarE . mkName . ("Language.Haskell.TH.Convenience." ++)
 
-astQuoter name parser e_splicer p_splicer = QuasiQuoter
-  (either error id . doSplices e_ast_parser e_splice_parser return)
-  (either error id . doSplices p_ast_parser p_splice_parser pat_exp)
+astQuoter use_conv name parser = QuasiQuoter
+  (either error id . doSplices e_ast e_splice return  e_apply)
+  (either error id . doSplices p_ast p_splice pat_exp p_apply)
   undefined undefined
  where
-  e_ast_parser = parser $ "Parse error in pun-substituted " ++ name ++ " AST literal"
-  p_ast_parser = parser $ "Parse error in pun-substituted " ++ name ++ " AST match"
-  e_splice_parser s = e_splicer <$> parseExp ("Parse error in " ++ name ++ " AST literal splice") s
-  p_splice_parser s = p_splicer <$> parsePat ("Parse error in " ++ name ++ " AST match splice")   s
+  e_ast = parser $ "Parse error in pun-substituted " ++ name ++ " AST literal"
+  p_ast = parser $ "Parse error in pun-substituted " ++ name ++ " AST match"
+  e_splice s = parseExp ("Parse error in " ++ name ++ " AST literal splice") s
+  p_splice s = parsePat ("Parse error in " ++ name ++ " AST match splice")   s
+  e_apply n e = return $ if use_conv then (AppE  $ VarE n) e else e
+  p_apply n p = return $ if use_conv then (ViewP $ VarE n) p else p
   pat_exp = expToPatMap . M.fromList
           $ map ( ("Language.Haskell.TH."++)
               *** (\e [p] -> viewP e $ expToPat' p) )
           [ ("Syntax.mkOccName",   [| occString |])
           , ("Syntax.mkPkgName",   [| pkgString |])
           , ("Syntax.mkModName",   [| modString |])
+          , ("Convenience.toExp",  [| fromExp   |])
+          , ("Convenience.toPat",  [| fromPat   |])
+          , ("Convenience.toType", [| fromType  |])
           ]
 
-doSplices :: forall a b. (Subst a, Lift a, Free a, Data b, Ord b)
-           => (String -> Either String a)
-           -> (String -> Either String b)
-           -> (Exp -> Q b)
-           -> String
-           -> Either String (Q b)
-doSplices ast_parser splice_parser convert input = do
+doSplices :: forall a b. (Subst a, Lift a, Free a, Data b, Ord b, Ppr b, Ppr a)
+          => (String -> Either String a)
+          -> (String -> Either String b)
+          -> (Exp -> Q b)
+          -> (Name -> b -> Q b)
+          -> String
+          -> Either String (Q b)
+doSplices ast_parser splice_parser from_exp apply_conv input = do
   chunks <- parseSplices input
   
   let avoids = filter ("splice" `isPrefixOf`) . tails
@@ -81,28 +81,23 @@ doSplices ast_parser splice_parser convert input = do
 
   parsed <- ast_parser code
 
-  subs <- mapM (secondM parse_sub) $ rights named
+  subs <- mapM (secondM splice_parser) $ rights named
 
   let sub_names = concatMap get_names subs
-      puns :: Lift c => (String -> String -> Either String c) -> Q [(b, b)]
-      puns f = mapM (firstM literalize) . rights $ map (firstM $ f "") subs
+      puns :: Lift c => (String -> String -> Either String c) -> (b -> Q b) -> Q [(b, b)]
+      puns f g = mapM (bothM literalize g) . rights $ map (firstM $ f "") subs
 
   return $ do
     qualified <- qualify_names (not . (`elem` sub_names)) parsed
     literalized <- literalize qualified
-    pes <- puns parseExp
-    pps <- puns parsePat
-    pts <- puns parseType
+    pes <- puns parseExp  (apply_conv $ conv_var "toExp")
+    pps <- puns parsePat  (apply_conv $ conv_var "toPat")
+    pts <- puns parseType (apply_conv $ conv_var "toType")
     substitute (M.fromList $ pes ++ pps ++ pts) literalized
  where
   unused_names avoids
     = filter (\s -> not $ any (s `isPrefixOf`) avoids)
     $ map (("splice" ++) . show) [1..]
-
-  parse_sub :: String -> Either String b
-  parse_sub v
-    = mapEither (\e -> "Parse error in splice:\n" ++ v ++ "\n" ++ e) id
-    $ splice_parser v
 
   give_names n (ChunkSplice (PlainSplice   s)) = Right (n, s)
   give_names _ (ChunkSplice (FancySplice n s)) = Right (n, s)
@@ -114,13 +109,13 @@ doSplices ast_parser splice_parser convert input = do
   qualify_names :: (Free a, Subst a) => (Name -> Bool) -> a -> Q a
   qualify_names f x = do
     let vars = rights $ free x
-    infos <- mapM (\n -> recover (return Nothing) (Just <$> reify n))
-           $ filter f vars
-    let rewrites = M.fromList . zip vars . map name_of $ catMaybes infos
+    infos <- mapM (\n -> ((n,) <$>) <$> recover (return Nothing) (Just <$> reify n)) vars
+    let rewrites = M.fromList . map (second name_of) . filter (f . fst) $ catMaybes infos
     return $ subst (Sub rewrites M.empty M.empty) x
 
-  literalize :: Lift c => c -> Q b
-  literalize x = convert =<< lift x
+  conv_var = mkName . ("Language.Haskell.TH.Convenience." ++)
+
+  literalize x = from_exp =<< lift x
 
   substitute :: M.Map b b -> b -> Q b
   substitute m = everywhereM (return `extM` do_sub)
@@ -142,10 +137,10 @@ parseSplices  :: String -> Either String [Chunk]
 parseSplices  = mapEither show consolidate . parse parser ""
  where
   consolidate [] = []
-  consolidate (ChunkLit "" : xs)             = consolidate xs
+  consolidate (ChunkLit ""             : xs) = consolidate xs
   consolidate (ChunkLit x : ChunkLit y : xs) = consolidate $ ChunkLit (x ++ y) : xs
   consolidate (x:xs)                         = x : consolidate xs
-  -- This is probably not good parsec style.
+  -- This is probably awful parsec style.
   parser = do
     prefix <- manyTill anyChar 
             $ lookAhead eof <|> (lookAhead (oneOf "$()") >> return ())
@@ -153,30 +148,37 @@ parseSplices  = mapEither show consolidate . parse parser ""
      <|> do
       a <- lookAhead anyChar
       (ChunkLit prefix:) <$> case a of
+
         '(' -> do
           char '('
           nested <- parser
           char ')'
           continue $ [ChunkLit "("] ++ nested ++ [ChunkLit ")"]
+
         '$' -> do
           char '$'
           b <- anyChar
           case b of
+
             '(' -> do
-              c <- anyChar
+              c <- lookAhead anyChar
               case c of
+
                 '<' -> do
+                  char '<'
                   splice <- fancy_escaped
                   char '>'
-                  code <- splice_code
-                  char ')'
+                  code <- splice_code 0
                   continue [ChunkSplice $ FancySplice splice code]
+
                 _ ->  do
-                  splice <- splice_code
-                  char ')'
-                  continue [ChunkSplice $ PlainSplice (c:splice)]
+                  code <- splice_code 0
+                  continue [ChunkSplice $ PlainSplice code]
+
             _ -> (ChunkLit "$":) <$> parser
-        ')' -> return [ChunkLit ""]
+
+        ')' -> return []
+
         _   -> fail "Impossible!"
 
   continue cs = (cs ++) <$> parser
@@ -187,9 +189,12 @@ parseSplices  = mapEither show consolidate . parse parser ""
 
   parens p = (++")") . ('(':) <$> between (char '(') (char ')') p
 
-  splice_code = parens splice_code
-            <|> ((:) <$> noneOf "()" <*> splice_code)
-            <|> return []
+  splice_code n = do
+    a <- anyChar
+    case a of
+      '(' ->                               (a:) <$> splice_code (n + 1)
+      ')' -> if n == 0 then return "" else (a:) <$> splice_code (n - 1)
+      _   ->                               (a:) <$> splice_code n
 
 
 -- Misc Utils
@@ -212,16 +217,17 @@ parsePat  err s = mapEither ((err++":\n"++s)++) Exts.toPat  . Exts.parseResultTo
                 $ Exts.parsePatWithMode  parseMode s
 parseType err s = mapEither ((err++":\n"++s)++) Exts.toType . Exts.parseResultToEither
                 $ Exts.parseTypeWithMode parseMode s
-parseDecs err s = mapEither ((err++":\n"++s)++) (\(Module _ _ _ _ _ _ x) -> Exts.toDecs x)
+parseDecs err s = mapEither ((err++":\n"++s)++) 
+                            (\(Exts.Module _ _ _ _ _ _ x) -> Exts.toDecs x)
                 . Exts.parseResultToEither
                 $ Exts.parseModuleWithMode parseMode s
 
 -- | Parse mode with all extensions and no fixities.
 parseMode :: Exts.ParseMode
 parseMode = Exts.ParseMode
-  { parseFilename = ""
-  , extensions = Exts.glasgowExts ++ [Exts.TupleSections, Exts.BangPatterns, Exts.ViewPatterns]
-  , ignoreLinePragmas = False
-  , ignoreLanguagePragmas = False
-  , fixities = Nothing
+  { Exts.parseFilename = ""
+  , Exts.extensions = Exts.glasgowExts ++ [Exts.TupleSections, Exts.BangPatterns, Exts.ViewPatterns]
+  , Exts.ignoreLinePragmas = False
+  , Exts.ignoreLanguagePragmas = False
+  , Exts.fixities = Nothing
   }

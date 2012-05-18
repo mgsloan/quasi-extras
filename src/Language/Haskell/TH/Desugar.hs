@@ -34,6 +34,8 @@ import Language.Haskell.TH.Builders
 import Language.Haskell.TH.Convenience
 import Language.Haskell.TH.ReifyCatch.Internal
 
+{-
+
 -- Observation:  In general, as things using TH approach language extensions / 
 -- plugins / advanced DSLs, interoperating with GHC's functionality becomes more
 -- and more valuable.  Currently this isn't at all possible.  For example, it
@@ -413,3 +415,5 @@ dsLambda ps e
  where
   isVar (VarP _) = True
   isVar _        = False
+
+-}

@@ -7,7 +7,8 @@ import Debug.Trace           ( trace )
 import Language.Haskell.TH
 import Language.Haskell.TH.Quote
 
-import Language.Haskell.TH.Desugar ( eerror )
+{-
+import Language.Haskell.TH.Desugar  ( eerror )
 import Language.Haskell.TH.Builders ( parseExp )
 
 data Op = Op Exp Fixity
@@ -100,6 +101,8 @@ resolveFixities = liftM (fromFixed . eerror . resolveToks)
 equasi :: (String -> ExpQ) -> QuasiQuoter
 equasi f = QuasiQuoter f undefined undefined undefined
 
+-}
+
 {-
 -- Test quasiquoter
 fixityQ :: QuasiQuoter
@@ -108,6 +111,7 @@ fixityQ = equasi $ resolveFixities . parseExp
 desugarQ :: QuasiQuoter
 desugarQ = equasi ((desugar =<<) . resolveFixities . parseExp)
 -}
+
 
 
 {- Version that handles negation (unnecessary)

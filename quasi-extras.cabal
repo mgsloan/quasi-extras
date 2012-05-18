@@ -37,6 +37,7 @@ Library
                      split,
                      syb,
                      template-haskell >= 2.5.0.0,
+                     themplates,
                      th-build,
                      th-extra,
                      th-lift,

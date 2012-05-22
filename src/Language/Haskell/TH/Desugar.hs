@@ -57,12 +57,6 @@ import Language.Haskell.TH.ReifyCatch.Internal
 eerror :: Either String a -> a
 eerror = either error id
 
-allUInfix :: Exp -> Exp
-allUInfix = everywhere (id `extT` convert)
- where
-  convert (InfixE (Just l) o (Just r)) = UInfixE l o r
-  convert e = e
-
 quoteCommaPpr :: Ppr a => [a] -> String
 quoteCommaPpr xs = show . punctuate comma $ map (quotes . ppr) xs
 

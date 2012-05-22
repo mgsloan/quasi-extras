@@ -9,12 +9,10 @@ import Control.Arrow                    ( (&&&), (***), first, second )
 import Control.Monad.Trans.Class        ( lift )
 import Control.Monad.Trans.Either       ( EitherT(..), hoistEither )
 import Data.Char                        ( toUpper )
-import Data.Data                        ( Data, gmapQ )
 import Data.Either                      ( rights )
 import Data.List                        ( isPrefixOf, isInfixOf, tails )
 import Data.Maybe                       ( catMaybes )
-import Data.Generics.Aliases            ( extM, extQ )
-import Data.Generics.Schemes            ( everywhereM )
+import Data.Generics                    ( Data, gmapQ, extT, everywhere )
 import Debug.Trace (trace)
 import qualified Language.Haskell.Exts as Exts
 import qualified Language.Haskell.Meta as Exts
@@ -44,8 +42,8 @@ tc = astQuoter True "Type" parseType
 dc = astQuoter True "Decs" parseDecs
 
 astQuoter use_conv name parser = QuasiQuoter
-  (errEitherT . doSplices e_ast e_splice return  e_apply)
-  (errEitherT . doSplices p_ast p_splice pat_exp p_apply)
+  ( errEitherT . doSplices e_ast e_splice return  e_apply )
+  ( errEitherT . doSplices p_ast p_splice pat_exp p_apply )
   undefined undefined
  where
   errEitherT e = either fail return =<< runEitherT e
@@ -93,7 +91,7 @@ newParser = spliceParser $ do
                                      [try $ string "}}" >> return ""])
 
 
-doSplices :: forall a b. (Subst a, TH.Lift a, Free a, Data b, Ord b, Ppr b, Ppr a)
+doSplices :: forall a b. (Subst a, TH.Lift a, Free a, Data b, Ord b)
           => (String -> EitherT String Q a)
           -> (String -> EitherT String Q b)
           -> (Exp -> Q b)
@@ -111,8 +109,8 @@ doSplices ast_p splice_p convert post_apply input = do
  where
   unused_names avoids
     = filter (\s -> not $ any (s `isPrefixOf`) avoids)
-    $ map (("splice" ++) . show) [1..]
-
+    $ map (("splice" ++) . show) ([1..] :: [Int])
+ 
   give_names n (Splice (PlainSplice   s)) = Splice (n, s)
   give_names _ (Splice (FancySplice n s)) = Splice (n, s)
   give_names _ (Chunk str)                = Chunk str
@@ -125,12 +123,14 @@ doSplices ast_p splice_p convert post_apply input = do
   splice_parser (pun, code) = do
     expr <- splice_p code
     case results' of
-      [] -> hoistEither $ Left ""
+      [] -> hoistEither $ Left $ "Parse error in fancy splice's pun expression: " ++ pun ++ "\n"
+                              ++ "Here are the different parse errors:\n"
+                              ++ unlines (map (\(Left e) -> e) results)
       _  -> sequence [(\r' -> (post_apply (conv_var v) r', expr)) <$> lift r | (v, r) <- results']
    where
-    results = [ return . ("toExp" ,) . literalize =<< parseExp  "" pun
-              , return . ("toPat" ,) . literalize =<< parsePat  "" pun
-              , return . ("toType",) . literalize =<< parseType "" pun
+    results = [ ("toExp" ,) . literalize <$> parseExp  "" pun
+              , ("toPat" ,) . literalize <$> parsePat  "" pun
+              , ("toType",) . literalize <$> parseType "" pun
               ] -- NOTE: this uses the regular Either monad.
     results' = rights results
 
@@ -149,32 +149,28 @@ doSplices ast_p splice_p convert post_apply input = do
 
 -- Misc Utils
 
+debug :: Show x => x -> x
 debug x = trace (show x) x
 
 mapEither :: (a -> c) -> (b -> d) -> Either a b -> Either c d
 mapEither f g = either (Left . f) (Right . g)
 
+mapLeft :: (a -> c) -> Either a b -> Either c b
 mapLeft  f = mapEither f id
+
+mapRight :: (b -> d) -> Either a b -> Either a d
 mapRight f = mapEither id f
 
-
-firstM  f (x, y) = f x >>= \x' ->                return (x', y )
-
-secondM g (x, y) =                g y >>= \y' -> return (x , y')
-
-bothM f g (x, y) = f x >>= \x' -> g y >>= \y' -> return (x', y')
-
-dropPrefix p xs
-  | p `isPrefixOf` xs = drop (length p) xs
-  | otherwise = xs
-
-
+parseExp  :: String -> String -> Either String Exp
 parseExp  err s = mapEither ((err++":\n"++s)++) Exts.toExp  . Exts.parseResultToEither
                 $ Exts.parseExpWithMode  parseMode s
+parsePat  :: String -> String -> Either String Pat
 parsePat  err s = mapEither ((err++":\n"++s)++) Exts.toPat  . Exts.parseResultToEither
                 $ Exts.parsePatWithMode  parseMode s
+parseType :: String -> String -> Either String Type
 parseType err s = mapEither ((err++":\n"++s)++) Exts.toType . Exts.parseResultToEither
                 $ Exts.parseTypeWithMode parseMode s
+parseDecs :: String -> String -> Either String [Dec]
 parseDecs err s = mapEither ((err++":\n"++s)++) 
                             (\(Exts.Module _ _ _ _ _ _ x) -> Exts.toDecs x)
                 . Exts.parseResultToEither

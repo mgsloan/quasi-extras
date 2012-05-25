@@ -2,6 +2,17 @@
 
 -- This implements a static interpreter for numeric literals
 
+{- Example:
+
+λ> [evalQ| if True then 1 + 4 else 9 * (30 - 2) + 100 |]
+<interactive>:5:1-53: Splicing expression
+    " if True then 1 + 4 else 9 * (30 - 2) + 100 "
+  ======>
+    if True then 5 else 352
+5
+
+-}
+
 import Control.Applicative              ( (<$>), (<*>) )
 import Data.Data                        ( Data )
 import Data.Generics.Aliases            ( extM )
@@ -22,7 +33,7 @@ evaluate x = everywhereM (return `extM` process)
            =<< qualifyNames (const True)
            =<< resolveFixities x
  where
-  process e = eval . dsParens . debug <$> dsInfix (debug e)
+  process e = eval . dsParens <$> dsInfix e
 
 eval :: Exp -> Exp
 eval e = maybe e id $ case e of

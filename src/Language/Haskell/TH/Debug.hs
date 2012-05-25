@@ -1,8 +1,18 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 -- utility functions for debugging TH in GHCI
+module Language.Haskell.TH.Debug where
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Quote
 import Language.Haskell.TH.Lift
+
+debugQ :: Lift a => (String -> Q a) -> QuasiQuoter
+debugQ f = QuasiQuoter helper undefined undefined undefined
+ where
+  helper s = do
+   r <- f s
+   return $ AppE (VarE $ mkName "show") r
 
 $(deriveLiftMany
   [ ''Info
@@ -33,8 +43,10 @@ $(deriveLiftMany
   , ''Match
   ] )
 
-reifyQ = QuasiQuoter helper undefined undefined undefined
- where
-  helper s = do
-   l <- lift =<< reify (mkName s)
-   return $ AppE (VarE $ mkName "show") l
+debugInfoQ :: QuasiQuoter
+debugInfoQ = debugQ (liftM lift . reify . mkName)
+
+debugShowQ = debugQ ()
+
+debugPPQ :: QuasiQuoter
+debugInfoQ = debugQ ()

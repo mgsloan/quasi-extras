@@ -22,9 +22,11 @@ Library
 
   Exposed-modules:   Language.Haskell.TH.Builders
                      Language.Haskell.TH.Conversion
+                     Language.Haskell.TH.Convenience
                      Language.Haskell.TH.Desugar
                      Language.Haskell.TH.Fixity
                      Language.Haskell.TH.OverloadApp
+                     Language.Haskell.TH.Quote.Utils
                      Language.Haskell.TH.ReifyCatch
                      Language.Haskell.TH.ReifyCatch.Internal
   Extensions:        RankNTypes

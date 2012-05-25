@@ -16,25 +16,14 @@ module Language.Haskell.TH.Desugar where
 
 import qualified Data.Map as M
 
-import Control.Arrow              ( first )
-import Control.Monad              ( liftM )
-import Control.Monad.Trans.Class  ( lift )
-import Control.Applicative        ( (<$>) )
-import Data.Foldable              ( foldlM )
-import Data.Generics              ( Data )
-import Data.Generics.Aliases      ( extT, extM )
-import Data.Generics.Schemes      ( everywhere, everywhereM )
-import Data.List                  ( find, intersperse )
-import Data.Maybe                 ( fromJust )
+import Control.Arrow                   ( first )
+import Control.Monad.Trans.Class       ( lift )
+import Data.List                       ( find )
 import Language.Haskell.TH
-import Language.Haskell.TH.Ppr    ( pprString ) 
-import Language.Haskell.TH.PprLib ( punctuate, comma, quotes )
-import Language.Haskell.TH.Quote
+import Language.Haskell.TH.PprLib      ( punctuate, comma, quotes )
 import Language.Haskell.TH.Builders
-import Language.Haskell.TH.Convenience
+import Language.Haskell.TH.Quote.Utils ( toUInfix )
 import Language.Haskell.TH.ReifyCatch.Internal
-
-{-
 
 -- Observation:  In general, as things using TH approach language extensions / 
 -- plugins / advanced DSLs, interoperating with GHC's functionality becomes more
@@ -54,8 +43,6 @@ import Language.Haskell.TH.ReifyCatch.Internal
 -- TODO: Resugarings.
 
 -- Utilities
-eerror :: Either String a -> a
-eerror = either error id
 
 quoteCommaPpr :: Ppr a => [a] -> String
 quoteCommaPpr xs = show . punctuate comma $ map (quotes . ppr) xs
@@ -99,6 +86,9 @@ desugar = everywhereM (return `extM` helper)
   helper                e  =           return         e
 -}
 
+dsParens :: Exp -> Exp
+dsParens [e'| ( {{x}} ) |] = x
+dsParens x                 = x
 
 -- | Desugars an infix operator.  This is close to the way that the Standard
 --   Report de-sugars infix-operators:
@@ -124,19 +114,22 @@ desugar = everywhereM (return `extM` helper)
 --   that @ (e !) @ is equivalent (from the point of view of both type checking
 --   and execution) to the expression @ ((!) e) @.
 --dsInfix :: (Maybe Exp) -> Exp -> (Maybe Exp) -> ExpQ
-dsInfix :: (Maybe Exp) -> Exp -> (Maybe Exp) -> ExpQ
+--dsInfix :: (Maybe Exp) -> Exp -> (Maybe Exp) -> ExpQ
+{-
 dsInfix Nothing  o Nothing  = return o
-dsInfix (Just l) o Nothing  = return [thExp| $(o) $(l) |]
-dsInfix (Just l) o (Just r) = return [thExp| $(o) $(l) $(r) |]
+dsInfix (Just l) o Nothing  = return [e'| {{o}} {{l}} |]
+dsInfix (Just l) o (Just r) = return [e'| {{o}} {{l}} {{r}} |]
 dsInfix Nothing  o (Just r) = newName "x" >>= \x
-                           -> return [thExp| \$(VarP x) -> $(VarE x) $(o) $(r) |]
-{- --TODO
-dsInfix [thExp|  $(l) `$(o)` $(r)  |] = return [thExp| $(o) $(l) $(r) |]
-dsInfix [thExp| ($(l) `$(o)`     ) |] = return [thExp| $(o) $(l) |]
-dsInfix [thExp| (     `$(o)` $(r)) |] = newName "x" >>= \x
-                                     -> return [thExp| $(x) $(o) $(r) |]
-dsInfix e = return e
+                           -> return [e'| \{{VarP x}} -> {{VarE x}} {{o}} {{r}} |]
 -}
+dsInfix :: Exp -> ExpQ
+dsInfix = helper . toUInfix
+ where
+  helper [e'|  {{l}} `{{o}}` {{r}}  |] = return [e'| {{o}} {{l}} {{r}} |]
+  helper [e'| ({{l}} `{{o}}`      ) |] = return [e'| {{o}} {{l}} |]
+  helper [e'| (      `{{o}}` {{r}}) |] = newName "x" >>= \x
+                                      -> return [e'| \{{VarP x}} -> {{o}} {{VarE x}} {{r}} |]
+  helper e = return e
 
 -- | Desugars the statements involved in a do-block, as described in the
 --   Standard Report:
@@ -200,8 +193,8 @@ dsDo (x:xs) = process =<< dsDo xs
 --   (call it @t@), and the type of the overall expression is @[t]@
 --   (see Section 4.1.2).
 dsList :: Exp -> Exp
-dsList (ListE xs) = foldr (\l r -> [thExp| $(l) : $(r) |]) (ListE []) xs
-
+dsList (ListE xs) = foldr (\l r -> [e'| {{l}} : {{r}} |]) (ListE []) xs
+dsList e = e
 
 -- | De-sugars arithmetic sequences as described in the Standard Report:
 --
@@ -214,12 +207,13 @@ dsList (ListE xs) = foldr (\l r -> [thExp| $(l) : $(r) |]) (ListE []) xs
 -- @
 --   where enumFrom, enumFromThen, enumFromTo, and enumFromThenTo are class
 --   methods in the class Enum as defined in the Prelude (see Figure 6.1).
+dsArithSeq :: Exp -> Exp
 dsArithSeq (ArithSeqE r) = case r of
- (FromR       f    ) -> [thExp| enumFrom       $(f)           |]
- (FromThenR   f n  ) -> [thExp| enumFromThen   $(f) $(n)      |]
- (FromToR     f   t) -> [thExp| enumFromTo     $(f)      $(t) |]
- (FromThenToR f n t) -> [thExp| enumFromThenTo $(f) $(n) $(t) |]
-
+ (FromR       f    ) -> [e'| enumFrom       {{f}}             |]
+ (FromThenR   f n  ) -> [e'| enumFromThen   {{f}} {{n}}       |]
+ (FromToR     f   t) -> [e'| enumFromTo     {{f}}       {{t}} |]
+ (FromThenToR f n t) -> [e'| enumFromThenTo {{f}} {{n}} {{t}} |]
+dsArithSeq e = e
 
 --TODO: What is "ExplicitPArr", PArrSeq, etc?
 
@@ -244,8 +238,8 @@ dsIf :: Exp -> Exp -> Exp -> ExpQ
 dsIf c t e = recover (return fallback) (reify ifThenElse >> return overloaded)
  where
   ifThenElse = mkName "ifThenElse"
-  overloaded = [thExp'| $(ifThenElse) $(c) $(t) $(e) |]
-  fallback = [thExp'| case $(c) of { True -> $(t); False -> $(e) } |]
+  overloaded = [ec| {{ifThenElse}} {{c}} {{t}} {{e}} |]
+  fallback = [e'| case {{c}} of { True -> {{t}}; False -> {{e}} } |]
 
 
 -- | Desugars record construction as described in the Standard Report:
@@ -368,8 +362,8 @@ dsRecUpd e fes = do
 --   field labeled with @f@, @p@ij is @y@ when @f@ labels the jth component
 --   of @C@i or @_@ otherwise, and @e@i is @y@ when some field in @C@i has a
 --   label of @f@ or @undefined@ otherwise.
-dsRecField :: Name -> ExpQ
-dsRecField = undefined
+--dsRecField :: Name -> ExpQ
+--dsRecField = undefined
 
 
 -- | This doesn't seem like a very useful de-sugaring to me, but it implements
@@ -382,7 +376,8 @@ dsRecField = undefined
 dsSig :: Exp -> Type -> ExpQ
 dsSig e t = do
   v <- newName "v"
-  return [thExp'| let { $(v) :: $(t); $(v) = $(e) } in $(v) |]
+  return [e'| let { {{VarP v}} :: {{t}}; {{VarP v}} = {{e}} } in {{VarE v}} |]
+  --TODO: return [ec| let { {{v}} :: {{t}}; {{v}} = {{e}} } in {{v}} |]
 
 -- | This doesn't seem like a very useful de-sugaring to me, but it implements
 --   the desugaring / translation of lambdas specified in the report:
@@ -400,7 +395,7 @@ dsLambda ps e
   | otherwise = do
     names <- mapM (const $ newName "x") ps
     --TODO
-    --return [thExp| \$(<x1 xn>map varP names) -> case ($(<x1, xn> map varE names)) of
+    --return [e'| \{{<x1 xn>map varP names}} -> case ({{<x1, xn> map varE names}}) of
     --               |]
     -- Parens used to prevent the de-sugaring from recursing forever.
     parensE . lamE (map varP names) 
@@ -409,5 +404,3 @@ dsLambda ps e
  where
   isVar (VarP _) = True
   isVar _        = False
-
--}

@@ -2,13 +2,10 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module Language.Haskell.TH.Fixity where
 
-import Control.Monad         ( liftM )
-import Data.Generics         ( Data, gmapM, everywhereM, extM, everywhere, extT )
-import Debug.Trace           ( trace )
+import Control.Monad ( liftM )
+import Data.Generics ( Data, gmapM, extM, everywhere, extT )
+import Debug.Trace   ( trace )
 import Language.Haskell.TH
-import Language.Haskell.TH.Quote
-
-import Language.Haskell.TH.Builders ( parseExp )
 
 data Op = Op Exp Fixity
   deriving Eq
@@ -101,20 +98,8 @@ everywhereM' :: (Data b, Monad m) => (forall a. Data a => a -> m a) -> b -> m b
 everywhereM' f x = do x' <- f x
                       gmapM (everywhereM' f) x'
 
+resolveFixities :: forall b. Data b => b -> Q b
 resolveFixities = everywhereM' (return `extM` resolveTopFixities)
-
--- Expression quasiquoter
-equasi :: (String -> ExpQ) -> QuasiQuoter
-equasi f = QuasiQuoter f undefined undefined undefined
-
-allUInfix :: Data a => a -> a
-allUInfix = everywhere (id `extT` convert)
- where
-  convert (InfixE (Just l) o (Just r)) = UInfixE l o r
-  convert e = e
-
-
-
 
 
 {-

@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE PatternGuards, TupleSections #-}
 module Language.Haskell.TH.Conversion
   ( patToExp, expToPat, expToPat', expToPatMap, conToPat ) where
 
@@ -35,6 +35,7 @@ patToExp (AsP   _ _) = error   "AsP has no expression equivalent."
 patToExp (ViewP _ _) = error "ViewP has no expression equivalent."
 patToExp (WildP    ) = error "WildP has no expression equivalent."
 
+expToPat' :: Exp -> PatQ
 expToPat' = expToPat (const $ error "Cannot convert function application to pattern.")
 
 expToPatMap :: (M.Map String ([Exp] -> PatQ)) -> Exp -> PatQ
@@ -47,8 +48,8 @@ expToPatMap m = expToPat fallback
 
 -- | Converts an expression to a pattern.
 expToPat :: ([Exp] -> PatQ) -> Exp -> PatQ
-expToPat f (LitE l) = litP l
-expToPat f (VarE n) = varP n
+expToPat _ (LitE l) = litP l
+expToPat _ (VarE n) = varP n
 
 expToPat f (TupE          ps) =        tupP $ map (expToPat f) ps
 expToPat f (UnboxedTupE   ps) = unboxedTupP $ map (expToPat f) ps
@@ -60,7 +61,7 @@ expToPat f (ParensE p)   = parensP' $ expToPat f p
 expToPat f ( InfixE (Just l) (ConE n) (Just r)) =  infixP' (expToPat f l) n (expToPat f r)
 expToPat f (UInfixE       l  (ConE n)       r ) = uInfixP' (expToPat f l) n (expToPat f r)
 
-expToPat f e@(ConE n) = conP n []
+expToPat _ (ConE n) = conP n []
 
 expToPat f e@(AppE _ _)
   = case collect e [] of
@@ -70,7 +71,7 @@ expToPat f e@(AppE _ _)
   collect (AppE l r) xs = collect l (r:xs)
   collect x          xs = x:xs
 
-expToPat f e = error $ " has no pattern equivalent:\n" ++ show e 
+expToPat _ e = error $ " has no pattern equivalent:\n" ++ show e 
 
 -- TODO expToPat   (RecE        n fs) = recConP' n $ map (second expToPat) fs
 

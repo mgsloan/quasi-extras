@@ -14,9 +14,7 @@
 -}
 
 import Control.Applicative              ( (<$>), (<*>) )
-import Data.Data                        ( Data )
-import Data.Generics.Aliases            ( extM )
-import Data.Generics.Schemes            ( everywhereM )
+import Data.Generics                    ( Data, everywhereM, extM )
 import Language.Haskell.TH
 import Language.Haskell.TH.Builders
 import Language.Haskell.TH.Desugar      ( dsParens, dsInfix )

@@ -18,6 +18,9 @@ It provides the following features:
 
     Provides some functions for (partial) conversion between the different language domains.  For example, a pattern matcher can be turned into a construction expression, and vice versa.
 
+  * Language.Haskell.TH.StringSplice
+
+    Implementation of string quoter and matcher.
 
 Other ideas:
 

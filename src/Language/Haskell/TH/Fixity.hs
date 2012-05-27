@@ -3,7 +3,7 @@
 module Language.Haskell.TH.Fixity where
 
 import Control.Monad ( liftM )
-import Data.Generics ( Data, gmapM, extM, everywhere, extT )
+import Data.Generics ( Data, gmapM, extM )
 import Debug.Trace   ( trace )
 import Language.Haskell.TH
 
@@ -14,7 +14,7 @@ data Op = Op Exp Fixity
 data OpTok = TExp Exp
            | TOp Op
 
--- Output with resolvd fixities
+-- Output with resolved fixities
 data OpFixed = OpInfix OpFixed Op OpFixed
              | OpExp Exp
   deriving (Eq, Show)

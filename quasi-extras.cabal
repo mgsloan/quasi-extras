@@ -20,16 +20,14 @@ Source-Repository head
 Library
   Hs-Source-Dirs:    src
 
-  Exposed-modules:   Language.Haskell.TH.Builders
-                     Language.Haskell.TH.Conversion
-                     Language.Haskell.TH.Convenience
-                     Language.Haskell.TH.Desugar
-                     Language.Haskell.TH.Fixity
-                     Language.Haskell.TH.OverloadApp
-                     Language.Haskell.TH.Quote.Utils
-                     Language.Haskell.TH.ReifyCatch
-                     Language.Haskell.TH.ReifyCatch.Internal
-                     Language.Haskell.TH.StringSplice
+  Exposed-modules:   Language.Quasi.Ast
+                     Language.Quasi.Convenience
+                     Language.Quasi.Internal.Conversion
+                     Language.Quasi.Internal.Desugar
+                     Language.Quasi.Internal.Fixity
+                     Language.Quasi.Internal.Utils
+                     Language.Quasi.OverloadApp
+                     Language.Quasi.StringSub
   Extensions:        RankNTypes
   Build-depends:     base >= 3.0 && < 6,
                      containers,

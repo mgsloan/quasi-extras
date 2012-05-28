@@ -13,15 +13,15 @@
 -- to overload function application.
 --
 -----------------------------------------------------------------------------
-module Language.Haskell.TH.OverloadApp where
+module Language.Quasi.OverloadApp where
 
 import Data.Data                 ( Data )
 import Data.Generics.Schemes     ( everywhereM )
 import Language.Haskell.TH
-import Language.Haskell.TH.Builders
 import Language.Haskell.TH.Quote ( QuasiQuoter(..) )
 import Language.Haskell.Meta     ( toExp, toPat, toType, toDecs
                                  , parseResultToEither)
+import Language.Quasi.Ast
 
 -- | Makes quasi-quotation into an AST transformer.
 {-

@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies, FlexibleInstances, TypeSynonymInstances #-}
-module Language.Haskell.TH.Convenience
+module Language.Quasi.Convenience
   (   toExp,   toPat,   toType,   toDec,   toBody,   toStmt,   toMatch,   toGuard,   toTyVarBndr
   , fromExp, fromPat, fromType, fromDec, fromBody, fromStmt, fromMatch, fromGuard, fromTyVarBndr
   )
@@ -7,7 +7,6 @@ module Language.Haskell.TH.Convenience
 
 import Control.Applicative       ((<$>), (<*>))
 import Data.Char                 (isUpper)
-import Language.Haskell.TH.Named ( name_of )
 
 import Language.Haskell.TH
 

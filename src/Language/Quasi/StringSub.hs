@@ -1,22 +1,22 @@
 {-# LANGUAGE TemplateHaskell, QuasiQuotes #-}
-module Language.Haskell.TH.StringSplice where
+module Language.Quasi.StringSub where
 
 import Control.Arrow                   ( second )
 import Control.Applicative             ( (<$>) )
 import Data.List                       ( find, isPrefixOf, inits, tails )
-import Text.Themplates                 ( Chunk(..), parseSplices, curlySplice, chunk )
+import Text.Themplates                 ( parseSplices, curlySplice )
 import Language.Haskell.TH
-import Language.Haskell.TH.Builders    ( e', p' )
 import Language.Haskell.TH.Lift        ( Lift(..), lift )
 import Language.Haskell.TH.Quote       ( QuasiQuoter(..)  )
-import Language.Haskell.TH.Quote.Utils ( fromLeft, parseExp, parsePat )
+import Language.Quasi.Ast.TH           ( e', p' )
+import Language.Quasi.Internal.Utils   ( fromLeft, parseExp, parsePat )
 import System.IO.Unsafe                ( unsafePerformIO )
 
 --TODO: handle escaping.
 
--- let name = "Bob" in [s| hello, {{ name }} |]
+-- let name = "foobar" in [s| hello, {{ name }} |]
 --
--- " hello, Bob "
+-- " hello, foobar "
 
 splitFind :: String -> String -> Maybe (String, String)
 splitFind on xs =   second (drop $ length on)
@@ -34,19 +34,19 @@ s = QuasiQuoter expr pat undefined undefined
   expr code
     = return
     . foldr [e'| {{}} ++ {{}} |] [e'| [] |]
-    . map (chunk uLift (ParensE . fromLeft . parseExp . snd))
+    . map (either uLift (ParensE . fromLeft . parseExp . snd))
     . fromLeft
     $ parseSplices curlySplice code
 
   pat code = return $ case chunks of
-    (Chunk c:cs) -> foldr (\ch -> [p'| {{LitP $ CharL ch}} : {{}} |])
+    (Left c:cs) -> foldr (\ch -> [p'| {{LitP $ CharL ch}} : {{}} |])
                           (process cs) c
-    cs           -> process cs
+    cs          -> process cs
    where
     -- map (chunk (LitP . StringP) (ViewP . fromLeft . parsePat "" . snd))
-    process []        = LitP $ StringL ""
-    process [Chunk c] = LitP $ StringL c
-    process (Splice (_, splice) : Chunk c : cs)
+    process []       = LitP $ StringL ""
+    process [Left c] = LitP $ StringL c
+    process (Right (_, splice) : Left c : cs)
       = [p'| (splitFind {{uLift c}}
                 -> Just ( {{fromLeft $ parsePat splice}}
                         , {{process cs}}))

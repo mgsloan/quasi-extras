@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell, QuasiQuotes #-}
-module Language.Haskell.TH.ReifyCatch.Internal where
+module Language.Quasi.Reify.Internal where
 
 import qualified Data.Map as M
 import qualified Language.Haskell.TH.Lift as TH
@@ -19,12 +19,6 @@ errorQ = hoistEither . Left
 eterror :: ErrorQ a -> Q a
 eterror x = either error return =<< runEitherT x
 
--- | Constructs a clause with a normal body and no where declarations.
-normalClause :: [PatQ] -> ExpQ -> ClauseQ
-normalClause ps e = clause ps (normalB e) []
-
-normalMatch :: PatQ -> ExpQ -> MatchQ
-normalMatch p e = match p (normalB e) []
 
 reifyCatch :: Name -> ErrorQ Info
 reifyCatch n = do
@@ -74,3 +68,24 @@ case i of
 collectArrows :: [Type] -> Type -> [Type]
 collectArrows xs (AppT (AppT ArrowT x) y) = collectArrows (x : xs) y
 collectArrows xs t = t : xs
+
+
+
+{-  ( ErrorQ, errorQ, normalClause, normalMatch
+  , reifyCatch, reifyError
+  ) where
+
+import Language.Haskell.TH
+import Language.Haskell.TH.ReifyCatch.Internal
+
+
+--reifyTyConI :: Name -> ErrorQ Dec
+--reifyTyConI n = 
+
+reifyDataD :: Name -> ErrorQ Dec
+reifyDataD n = do
+  i <- reifyCatch n
+  case i of
+    (TyConI d@(DataD _ _ _ _)) -> d
+    _ -> reifyError "datatype constructor" n i
+-}

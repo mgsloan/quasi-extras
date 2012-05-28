@@ -12,18 +12,18 @@
 -- as in the Standard Report: <http://www.haskell.org/onlinereport/exps.html>
 --
 -----------------------------------------------------------------------------
-module Language.Haskell.TH.Desugar where
+module Language.Quasi.Internal.Desugar where
 
 import qualified Data.Map as M
 
-import Control.Arrow                   ( first )
-import Control.Monad.Trans.Class       ( lift )
-import Data.List                       ( find )
+import Control.Arrow                 ( first )
+import Control.Monad.Trans.Class     ( lift )
+import Data.List                     ( find )
 import Language.Haskell.TH
-import Language.Haskell.TH.PprLib      ( punctuate, comma, quotes )
-import Language.Haskell.TH.Builders
-import Language.Haskell.TH.Quote.Utils ( toUInfix )
-import Language.Haskell.TH.ReifyCatch.Internal
+import Language.Haskell.TH.PprLib    ( punctuate, comma, quotes )
+import Language.Quasi.Ast.TH
+import Language.Quasi.Internal.Utils
+  ( ErrorQ, errorQ, reifyCatch, normalClause, toUInfix )
 
 -- Observation:  In general, as things using TH approach language extensions / 
 -- plugins / advanced DSLs, interoperating with GHC's functionality becomes more

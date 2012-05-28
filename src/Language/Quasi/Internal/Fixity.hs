@@ -1,6 +1,6 @@
 -- Based on http://hackage.haskell.org/trac/haskell-prime/wiki/FixityResolution
 {-# LANGUAGE NoMonomorphismRestriction #-}
-module Language.Haskell.TH.Fixity where
+module Language.Quasi.Internal.Fixity where
 
 import Control.Monad ( liftM )
 import Data.Generics ( Data, gmapM, extM )

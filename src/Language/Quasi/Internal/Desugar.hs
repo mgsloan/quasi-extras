@@ -391,7 +391,7 @@ dsSig e t = do
 --   This isn't very useful, because it still uses lambdas!
 dsLambda :: [Pat] -> Exp -> ExpQ
 dsLambda ps e
-  | all isVar ps = return $ LamE ps e
+  | all isVar ps = return . ParensE $ LamE ps e
   | otherwise = do
     names <- mapM (const $ newName "x") ps
     --TODO

@@ -21,6 +21,7 @@ Library
   Hs-Source-Dirs:    src
 
   Exposed-modules:   Language.Quasi.Ast
+                     Language.Quasi.Ast.TH
                      Language.Quasi.Convenience
                      Language.Quasi.Internal.Conversion
                      Language.Quasi.Internal.Desugar

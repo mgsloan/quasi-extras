@@ -15,13 +15,15 @@
 
 import Control.Applicative              ( (<$>), (<*>) )
 import Data.Generics                    ( Data, everywhereM, extM )
+
 import Language.Haskell.TH
-import Language.Haskell.TH.Builders
-import Language.Haskell.TH.Desugar      ( dsParens, dsInfix )
-import Language.Haskell.TH.Fixity
+import Language.Haskell.TH.Syntax
 import Language.Haskell.TH.Quote        ( QuasiQuoter(..) )
-import Language.Haskell.TH.Quote.Utils  ( equasi', parseExp, qualifyNames, debug )
 import Language.Haskell.TH.Substitution ( Free, Subst )
+import Language.Quasi.Ast.TH            ( e' )
+import Language.Quasi.Internal.Desugar  ( dsParens, dsInfix )
+import Language.Quasi.Internal.Fixity   ( resolveFixities )
+import Language.Quasi.Internal.Utils    ( equasi', parseExp, qualifyNames, debug )
 
 evalQ :: QuasiQuoter
 evalQ = equasi' evaluate
@@ -34,17 +36,17 @@ evaluate x = everywhereM (return `extM` process)
   process e = eval . dsParens <$> dsInfix e
 
 eval :: Exp -> Exp
-eval e = maybe e id $ case e of
-  [e'| {{f}} {{pat -> Just x}} {{pat -> Just y}} |] -> case f of
+eval e = case e of
+  [e'| {{f}} {{ (pat -> Just x) }} {{ (pat -> Just y) }} |] -> case f of
     [e'| (+) |] -> build $ x + y
     [e'| (-) |] -> build $ x - y
     [e'| (*) |] -> build $ x * y
-    _           -> Just e
-  [e'| negate {{pat -> Just x}} |] -> build $ negate x
+    _           -> e
+  [e'| negate {{ (pat -> Just x) }} |] -> build $ negate x
   -- TODO: use de-sugaring for this
-  [e'| ( {{x}} ) |] -> Just x
-  _                 -> Just e
+  [e'| ( {{x}} ) |] -> x
+  _                 -> e
  where
-  build = Just . LitE . IntegerL
+  build = LitE . IntegerL
   pat (LitE (IntegerL x)) = Just x
   pat _                   = Nothing

@@ -404,3 +404,86 @@ dsLambda ps e
  where
   isVar (VarP _) = True
   isVar _        = False
+
+-- While the report specifies that there is no translation desugaring for
+-- tuples, I figure it might sometimes be useful to desugar them to the form
+-- @(,,) x y z@.
+--
+-- @(e1, …, ek)@ for @k ≥ 2@ is an instance of a k-tuple as defined in the
+-- Prelude, and requires no translation. If @t1@ through @tk@ are the types of
+-- @e1@ through @ek@, respectively, then the type of the resulting tuple is
+-- @(t1, …, tk)@ (see Section 4.1.2).
+dsTuple :: Exp -> ExpQ
+dsTuple (TupE xs)
+  = appsE
+  $ conE (mkName $ "GHC.Tuple.(" ++ map (const ',') xs ++ ")")
+  : map return xs
+dsTuple e = return e
+
+-- | From the standard report:
+--
+-- A pattern binding binds variables to values. A simple pattern binding has
+-- form p = e. The pattern p is matched \“lazily\” as an irrefutable pattern, as
+-- if there were an implicit ~ in front of it. See the translation in Section
+-- 3.12. The general form of a pattern binding is p match, where a match is the
+-- same structure as for function bindings above; in other words, a pattern
+-- binding is:
+--
+-- @
+--   p | gs1 = e1
+--     | gs2 = e2
+--     . . .
+--     | gsm = em
+--   where { decls }
+-- @
+--
+-- Translation: The pattern binding above is semantically equivalent to this
+-- simple pattern binding:
+--
+-- @
+--   p = let decls in
+--         case () of
+--           () | gs1 -> e1
+--              | gs2 -> e2
+--              . . .
+--              | gsm -> em
+--           _ -> error "Unmatched pattern"
+-- @
+dsPatBinds :: Clause -> Clause
+dsPatBinds (Clause ps b ds)
+  = Clause ps (NormalB . LetE ds $ mkBody b) []
+ where
+  unit = mkName "GHC.Tuple.()"
+  mkBody (NormalB   e) = e
+  mkBody (GuardedB xs)
+    = CaseE (ConE unit)
+    [ Match (ConP unit []) (GuardedB xs) []
+    , Match WildP (NormalB [e'| error "Unmatched pattern" |]) []
+    ]
+--TODO: desugaring of pattern guards
+
+-- | From the standard report:
+--   The general binding form for functions is semantically equivalent to the
+--   equation (i.e. simple pattern binding):
+--
+-- @
+--   x = \x1 ... xk -> case (x1, . . . , xk) of
+--     (p11 , . . . , p1k) match1
+--     . . .
+--     (pn1 , . . . , pnk) matchn
+-- @
+--
+--   where the xi are new identiﬁers.
+dsFun :: Dec -> Dec
+dsFun (FunD n xs@(Clause pats _ _:_)) = FunD n [Clause [] (NormalB expr) []]
+ where
+  vars = map (mkName . ("arg"++) . show) [1..length pats]
+  expr = LamE (map VarP vars)
+       . CaseE (TupE $ map VarE vars)
+       $ map ((\(Clause ps b _) -> Match (TupP ps) b []) . dsPatBinds) xs
+dsFun d = d
+--TODO: recursively apply to function-including things?
+
+--TODO: there are other ways to slice this..  For one thing, how do we do
+-- de-sugaring of cases with guards / wheres..  Maybe have dsFun yield an
+-- output ready to be processed by dsPatBinds ?

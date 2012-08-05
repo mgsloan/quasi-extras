@@ -12,7 +12,7 @@ import Language.Quasi.Ast.TH           ( e', p' )
 import Language.Quasi.Internal.Utils   ( fromLeft, parseExp, parsePat )
 import System.IO.Unsafe                ( unsafePerformIO )
 
---TODO: handle escaping.
+--TODO: handle escaping double braces.
 
 -- let name = "foobar" in [s| hello, {{ name }} |]
 --
@@ -23,18 +23,26 @@ splitFind on xs =   second (drop $ length on)
                 <$> (find (isPrefixOf on . snd) $ zip (inits xs) (tails xs))
 
 uLift :: Lift a => a -> Exp
-uLift = uQ . lift
+uLift = unsafeQ . lift
 
-uQ :: Q a -> a
-uQ = unsafePerformIO . runQ
+unsafeQ :: Q a -> a
+unsafeQ = unsafePerformIO . runQ
 
+-- Unescaped string
 s :: QuasiQuoter
-s = QuasiQuoter expr pat undefined undefined
+s = stringQQ id
+
+-- Escaped string
+se :: QuasiQuoter
+se = stringQQ (read . ('"':) . (++"\""))
+
+stringQQ :: (String -> String) -> QuasiQuoter
+stringQQ str_process = QuasiQuoter expr pat undefined undefined
  where
   expr code
     = return
     . foldr [e'| {{}} ++ {{}} |] [e'| [] |]
-    . map (either uLift (ParensE . fromLeft . parseExp . snd))
+    . map (either (uLift . str_process) (ParensE . fromLeft . parseExp . snd))
     . fromLeft
     $ parseSplices curlySplice code
 
@@ -46,8 +54,9 @@ s = QuasiQuoter expr pat undefined undefined
     -- map (chunk (LitP . StringP) (ViewP . fromLeft . parsePat "" . snd))
     process []       = LitP $ StringL ""
     process [Left c] = LitP $ StringL c
+    process [Right (_, splice), Left ""] = fromLeft $ parsePat splice
     process (Right (_, splice) : Left c : cs)
-      = [p'| (splitFind {{uLift c}}
+      = [p'| (splitFind {{uLift $ str_process c}}
                 -> Just ( {{fromLeft $ parsePat splice}}
                         , {{process cs}}))
            |]

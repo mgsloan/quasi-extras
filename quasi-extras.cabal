@@ -6,16 +6,16 @@ License:             BSD3
 License-file:        LICENSE
 Author:              Michael Sloan
 Maintainer:          Michael Sloan <mgsloan at gmail>
-Homepage:            http://github.com/mgsloan/overload-app
+Homepage:            http://github.com/mgsloan/quasi-extras
 Copyright:           Michael Sloan 2012
 Category:            Template Haskell
 Build-type:          Simple
 Stability:           experimental
 Cabal-version:       >=1.6
-Bug-Reports:         http://github.com/mgsloan/overload-app
+Bug-Reports:         http://github.com/mgsloan/quasi-extras
 Source-Repository head
   Type: git
-  Location: git://github.com/mgsloan/overload-app
+  Location: git://github.com/mgsloan/quasi-extras
 
 Library
   Hs-Source-Dirs:    src
@@ -23,6 +23,7 @@ Library
   Exposed-modules:   Language.Quasi.Ast
                      Language.Quasi.Ast.TH
                      Language.Quasi.Convenience
+                     Language.Quasi.Instance
                      Language.Quasi.Internal.Conversion
                      Language.Quasi.Internal.Desugar
                      Language.Quasi.Internal.Fixity
@@ -34,7 +35,7 @@ Library
                      containers,
                      either,
                      haskell-src-exts,
-                     haskell-src-meta == 0.5.1.1, 
+                     haskell-src-meta < 0.6,
                      parsec,
                      split,
                      syb,

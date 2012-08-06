@@ -28,6 +28,7 @@ Library
                      Language.Quasi.Internal.Desugar
                      Language.Quasi.Internal.Fixity
                      Language.Quasi.Internal.Utils
+                     Language.Quasi.Lenq
                      Language.Quasi.OverloadApp
                      Language.Quasi.StringSub
   Extensions:        RankNTypes
@@ -44,5 +45,6 @@ Library
                      th-build,
                      th-extra,
                      th-lift,
-                     transformers
+                     transformers,
+                     lens
   Ghc-options:       -Wall
